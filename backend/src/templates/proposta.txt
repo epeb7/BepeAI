@@ -1,0 +1,13 @@
+PROPOSTA COMERCIAL
+
+Empresa: {{empresa}}
+CNPJ: {{cnpj}}
+Endereço: {{endereco}}
+
+Valor: R$ {{valor}}
+Prazo: {{prazo}}
+Responsável: {{responsavel}}
+
+Observações: {{observacoes}}
+
+Data de emissão: {{data_emissao}}

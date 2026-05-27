@@ -1,0 +1,35 @@
+{
+  "name": "bepeai-backend",
+  "version": "1.0.0",
+  "description": "Backend da BepeAI - Automação documental com IA",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^6.10.0",
+    "fontkit": "^2.0.4",
+    "groq-sdk": "^0.3.0",
+    "helmet": "^7.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "pdf-lib": "^1.17.1"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.5",
+    "@types/cors": "^2.8.15",
+    "@types/dotenv": "^6.1.1",
+    "@types/express": "^4.17.20",
+    "@types/jsonwebtoken": "^9.0.4",
+    "@types/multer": "^1.4.10",
+    "@types/node": "^20.8.10",
+    "tsx": "^4.7.0",
+    "typescript": "^5.2.2"
+  }
+}
