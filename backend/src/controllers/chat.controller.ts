@@ -1,233 +1,348 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middlewares/auth.middleware';
+import { sanitizePromptInput } from '../lib/sanitize';
+import logger from '../lib/logger';
 import {
   getState,
-  setTipoDocumento,
-  getCampoAtual,
-  getPerguntaAtual,
-  avançarEtapa,
-  isConversaFinalizada,
-  resetState,
-  getDadosCompletos,
+  setState,
+  deleteState,
+  initWorkflow,
+  applyFields,
+  rollback,
+  getCurrentGroup,
+  getCurrentGroupQuestion,
+  getCurrentGroupExample,
+  isWorkflowComplete,
+  getProgressInfo,
 } from '../services/conversation.service';
-import { extrairCampo } from '../services/groq.service';
+import { WorkflowState } from '../services/workflow.service';
+import { extrairMultiplosCampos } from '../services/groq.service';
 import { detectIntent, extractFieldToEdit } from '../services/intent.service';
-import { workflows, WorkflowStep } from '../workflows/definitions';
-import { gerarPDF } from '../services/pdf.service'; // <-- importação do serviço de PDF
+import { workflows } from '../workflows/definitions';
+import { ensureConversation, logTurn, completeConversation } from '../services/conversation.logger';
 
-const isSaudacao = (texto: string): boolean => {
-  const saudacoes = ['oi', 'olá', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'oie', 'e aí', 'opa', 'hey', 'hello'];
+// ============================================================
+// Helpers de domínio
+// ============================================================
+
+function isSaudacao(texto: string): boolean {
+  const saudacoes = ['oi', 'olá', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'oie', 'e aí', 'opa', 'hey', 'hello', 'eae', 'ei'];
   return saudacoes.some(s => texto.toLowerCase().includes(s));
+}
+
+function detectDocumentType(msg: string): string | null {
+  const lower = msg.toLowerCase();
+  if (lower.includes('contrato')) return 'contrato';
+  if (lower.includes('proposta')) return 'proposta_comercial';
+  if (lower.includes('relatório') || lower.includes('relatorio') || lower.includes('report')) return 'relatorio_final';
+  if (lower.includes('orçamento') || lower.includes('orcamento') || lower.includes('budget')) return 'orcamento';
+  return null;
+}
+
+const FIELD_LABELS: Record<string, string> = {
+  contratante_empresa: 'Empresa', contratante_cnpj: 'CNPJ', contratante_endereco: 'Endereço',
+  contratante_cidade: 'Cidade', contratante_estado: 'Estado', contratante_cargo: 'Cargo',
+  contratante_nome: 'Representante', contratante_nacionalidade: 'Nacionalidade',
+  contratante_estado_civil: 'Estado civil', contratante_profissao: 'Profissão',
+  contratante_rg: 'RG', contratante_cpf: 'CPF',
+  contratado_empresa: 'Empresa', contratado_cnpj: 'CNPJ', contratado_endereco: 'Endereço',
+  contratado_cidade: 'Cidade', contratado_estado: 'Estado', contratado_cargo: 'Cargo',
+  contratado_nome: 'Representante', contratado_nacionalidade: 'Nacionalidade',
+  contratado_estado_civil: 'Estado civil', contratado_profissao: 'Profissão',
+  contratado_rg: 'RG', contratado_cpf: 'CPF',
+  objeto_servicos: 'Serviço', data_inicio: 'Início', data_fim: 'Fim',
+  valor_total: 'Valor total', forma_pagamento: 'Pagamento', dia_pagamento: 'Vencimento',
+  aviso_previo: 'Aviso prévio', foro_comarca: 'Foro', cidade_assinatura: 'Local',
+  data_assinatura: 'Data de assinatura',
+  empresa: 'Empresa', cnpj: 'CNPJ', valor: 'Valor', prazo: 'Prazo', responsavel: 'Responsável',
+  dataInicio: 'Início', dataFim: 'Fim',
 };
+
+const GROUP_ICONS: Record<string, string> = {
+  contratante_dados: '🏢', contratante_rep: '👤',
+  contratado_dados: '🏢', contratado_rep: '👤',
+  contrato_objeto: '📋', contrato_periodo: '📅', contrato_encerramento: '⚖️',
+  proposta_dados: '💼', relatorio_dados: '📊', orcamento_dados: '💰',
+};
+
+function formatarValorResumo(field: string, value: string): string {
+  if ((field.endsWith('_cnpj') || field === 'cnpj') && /^\d{14}$/.test(value))
+    return value.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+  if ((field.endsWith('_cpf') || field === 'cpf') && /^\d{11}$/.test(value))
+    return value.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+  if (field === 'valor_total' || field === 'valor') {
+    const n = parseFloat(value.replace(',', '.'));
+    if (!isNaN(n)) return `R$ ${n.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+  }
+  if (field === 'aviso_previo') return `${value} dias`;
+  if (field === 'dia_pagamento') return `dia ${value}`;
+  return value;
+}
+
+function buildResumoFormatado(state: WorkflowState): string {
+  if (!state.workflowName) return '';
+  const wf = workflows[state.workflowName];
+  const sections: string[] = [];
+  for (const group of wf.fieldGroups) {
+    const present = group.fields.filter(f => f in state.data);
+    if (present.length === 0) continue;
+    const icon = GROUP_ICONS[group.id] ?? '📌';
+    const rows = present.map(f => {
+      const label = FIELD_LABELS[f] ?? f.replace(/_/g, ' ');
+      return `• **${label}:** ${formatarValorResumo(f, state.data[f])}`;
+    });
+    sections.push(`${icon} **${group.label}**\n${rows.join('\n')}`);
+  }
+  return sections.join('\n\n');
+}
+
+interface ProgressInfo {
+  currentGroup: number; totalGroups: number; currentGroupLabel: string;
+  completedFields: number; totalFields: number; isComplete: boolean;
+}
+
+function buildResponse(
+  resposta: string,
+  state: WorkflowState,
+  aguardandoConfirmacao = false,
+  extra: Record<string, unknown> = {}
+) {
+  const allFields = state.workflowName
+    ? (workflows[state.workflowName]?.steps.map(s => s.field) ?? [])
+    : [];
+  const dadosFaltantes = allFields.filter(f => !(f in state.data));
+  const progress = getProgressInfo(state) as ProgressInfo | null;
+  const exampleBlock = getCurrentGroupExample(state) ?? null;
+
+  return {
+    success: true,
+    resposta,
+    dadosExtraidos: state.data,
+    dadosFaltantes,
+    tipoDocumento: state.workflowName,
+    aguardandoConfirmacao,
+    progress,
+    exampleBlock,
+    conversationId: state.conversationId ?? null,
+    ...extra,
+  };
+}
+
+// ============================================================
+// Gerenciamento de conversationId e turnNumber — via WorkflowState
+// Elimina completamente o Map em memória: o estado persiste no store (Supabase ou memória)
+// ============================================================
+
+async function ensureConversationInState(
+  userId: string,
+  state: WorkflowState
+): Promise<WorkflowState> {
+  if (state.conversationId) return state; // já existe — reutiliza
+  const id = await ensureConversation(userId, state.workflowName);
+  const updated = { ...state, conversationId: id, turnNumber: 0 };
+  await setState(userId, updated);
+  return updated;
+}
+
+// ============================================================
+// Controller principal
+// ============================================================
 
 export const sendMessage = async (req: AuthRequest, res: Response) => {
   const userId = req.userId!;
-  const { message } = req.body;
-  if (!message) return res.status(400).json({ error: 'Mensagem vazia' });
+  const raw: string = req.body?.message ?? '';
 
-  console.log(`[Chat] ${userId}: ${message}`);
-  let state = getState(userId);
-  console.log('[Chat] Estado antes:', JSON.stringify(state.workflowState, null, 2));
+  if (!raw.trim()) return res.status(400).json({ error: 'Mensagem vazia' });
 
-  // Detectar intenção
-  const intent = detectIntent(message, state.workflowState);
-  console.log('[Chat] Intenção detectada:', intent);
+  const message = sanitizePromptInput(raw);
+  logger.info({ userId, length: raw.length }, '[Chat] Mensagem recebida');
 
-  // Comandos globais
+  let state = await getState(userId);
+  const isComplete = isWorkflowComplete(state);
+  const intent = detectIntent(message, isComplete);
+
+  logger.debug({ userId, intent, workflowName: state.workflowName }, '[Chat] Intenção detectada');
+
+  // ── CANCEL ────────────────────────────────────────────────
   if (intent === 'CANCEL') {
-    resetState(userId);
-    return res.json({
-      success: true,
-      resposta: '🔄 Conversa reiniciada. Que tipo de documento você quer criar? (contrato, proposta, relatório ou orçamento)',
-      dadosExtraidos: {},
-      dadosFaltantes: [],
-      tipoDocumento: null,
-    });
+    await deleteState(userId);
+    const empty = await getState(userId);
+    return res.json(buildResponse(
+      '🔄 Conversa reiniciada. Que tipo de documento você precisa criar?\n\n**contrato** · **proposta** · **relatório** · **orçamento**',
+      empty
+    ));
   }
 
+  // ── HELP ──────────────────────────────────────────────────
   if (intent === 'HELP') {
-    return res.json({
-      success: true,
-      resposta: '📘 **Ajuda**:\n- Digite o tipo de documento (contrato, proposta, relatório, orçamento)\n- Responda as perguntas uma a uma\n- Use "corrigir [campo]" para alterar um dado\n- Digite "cancelar" para recomeçar',
-      dadosExtraidos: state.workflowState.data,
-      dadosFaltantes: [],
-      tipoDocumento: state.workflowState.workflowName,
-    });
+    return res.json(buildResponse(
+      '📘 **Como usar a BepeAI:**\n\n' +
+      '• Diga o tipo de documento que deseja criar\n' +
+      '• Responda às perguntas — pode fornecer vários dados de uma vez\n' +
+      '• Use **"corrigir [campo]"** para alterar um dado já preenchido\n' +
+      '• **"cancelar"** para recomeçar do zero\n' +
+      '• Quando tudo estiver pronto, clique em **Gerar PDF**',
+      state
+    ));
   }
 
-  // ========== FLUXO DE CONFIRMAÇÃO E GERAÇÃO DE PDF ==========
-  if (isConversaFinalizada(state) && intent === 'CONFIRM') {
-    try {
-      const dados = getDadosCompletos(userId);
-      const tipo = state.workflowState.workflowName!;
-      const pdfBuffer = await gerarPDF(dados, tipo);
-      
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename=${tipo}_${Date.now()}.pdf`);
-      return res.send(pdfBuffer);
-    } catch (error) {
-      console.error('Erro ao gerar PDF:', error);
-      return res.status(500).json({ success: false, error: 'Erro ao gerar o documento PDF. Tente novamente.' });
+  // ── CONFIRM ───────────────────────────────────────────────
+  if (isComplete && intent === 'CONFIRM') {
+    return res.json(buildResponse(
+      '✅ Perfeito! Clique em **Gerar PDF** abaixo para baixar seu documento.',
+      state, false, { readyToDownload: true }
+    ));
+  }
+
+  // ── EDIT_FIELD ────────────────────────────────────────────
+  if (isComplete && intent === 'EDIT_FIELD') {
+    const fieldHint = extractFieldToEdit(message);
+    if (!fieldHint) {
+      return res.json(buildResponse(
+        '🤔 Não identifiquei qual campo corrigir. Diga por exemplo:\n"corrigir empresa" ou "alterar data_inicio"',
+        state
+      ));
     }
-  }
 
-  // Edição de campo após finalização (ainda em desenvolvimento)
-  if (isConversaFinalizada(state) && intent === 'EDIT_FIELD') {
-    const field = extractFieldToEdit(message);
-    if (field && state.workflowState.data[field] !== undefined) {
-      return res.json({
-        success: true,
-        resposta: `✏️ Para corrigir ${field}, por favor, envie o novo valor. (Funcionalidade em desenvolvimento)`,
-        dadosExtraidos: state.workflowState.data,
-        dadosFaltantes: [],
-        tipoDocumento: state.workflowState.workflowName,
-      });
-    } else {
-      return res.json({
-        success: true,
-        resposta: `🤔 Não entendi qual campo corrigir. Diga "corrigir empresa", "corrigir cnpj", etc.`,
-        dadosExtraidos: state.workflowState.data,
-        dadosFaltantes: [],
-        tipoDocumento: state.workflowState.workflowName,
-      });
+    const workflowDef = workflows[state.workflowName!];
+    const step = workflowDef?.steps.find(s =>
+      s.field === fieldHint ||
+      s.field.endsWith('_' + fieldHint) ||
+      s.field.startsWith(fieldHint + '_')
+    );
+
+    if (!step) {
+      const campos = workflowDef?.steps.map(s => s.field).join(', ') ?? 'nenhum';
+      return res.json(buildResponse(
+        `❌ Campo **"${fieldHint}"** não encontrado.\nCampos disponíveis: ${campos}`,
+        state
+      ));
     }
+
+    const newState = await rollback(userId, step.field);
+    if (!newState) {
+      return res.json(buildResponse(`❌ Não foi possível corrigir "${step.field}". Tente novamente.`, state));
+    }
+
+    state = newState;
+    const fieldLabel = FIELD_LABELS[step.field] ?? step.field.replace(/_/g, ' ');
+    return res.json(buildResponse(
+      `✏️ Vamos corrigir **${fieldLabel}**.\n\n${getCurrentGroupQuestion(state)}`,
+      state
+    ));
   }
 
-  // Etapa 0: sem workflow ativo
-  if (!state.workflowState.workflowName) {
+  // ── WORKFLOW COMPLETO ─────────────────────────────────────
+  if (isComplete) {
+    const resumo = buildResumoFormatado(state);
+    return res.json(buildResponse(
+      `✅ **Documento pronto para geração!**\n\n${resumo}\n\nClique em **Gerar PDF** ou diga **"corrigir [campo]"** para ajustar algum dado.`,
+      state, true
+    ));
+  }
+
+  // ── SEM WORKFLOW ATIVO ────────────────────────────────────
+  if (!state.workflowName) {
     if (isSaudacao(message)) {
-      return res.json({
-        success: true,
-        resposta: '👋 Olá! Sou a BepeAI. Posso criar contratos, propostas, relatórios e orçamentos. Que tipo de documento você gostaria de gerar?',
-        dadosExtraidos: {},
-        dadosFaltantes: [],
-        tipoDocumento: null,
-      });
+      return res.json(buildResponse(
+        '👋 Olá! Sou a **BepeAI**, sua assistente de automação documental.\n\nPosso criar:\n• **Contrato** de Prestação de Serviços\n• **Proposta** Comercial\n• **Relatório** Final\n• **Orçamento**\n\nQual documento você precisa?',
+        state
+      ));
     }
 
-    const msgLower = message.toLowerCase();
-    let tipoReconhecido: string | null = null;
-    if (msgLower.includes('contrato')) tipoReconhecido = 'contrato';
-    else if (msgLower.includes('proposta')) tipoReconhecido = 'proposta_comercial';
-    else if (msgLower.includes('relatório') || msgLower.includes('relatorio')) tipoReconhecido = 'relatorio_final';
-    else if (msgLower.includes('orçamento') || msgLower.includes('orcamento')) tipoReconhecido = 'orcamento';
+    const tipo = detectDocumentType(message);
+    if (tipo) {
+      // Inicia novo workflow — limpa conversationId para forçar criação de nova conversa no DB
+      state = await initWorkflow(userId, tipo);
+      // ensureConversationInState cria a linha no Supabase e persiste o ID no estado
+      state = await ensureConversationInState(userId, state);
+      const question = getCurrentGroupQuestion(state);
+      const nomeTipo = tipo.replace('_', ' ');
+      return res.json(buildResponse(
+        `📄 Ótimo! Vamos criar o seu **${nomeTipo}**.\n\n${question}`,
+        state
+      ));
+    }
 
-    if (tipoReconhecido) {
-      setTipoDocumento(userId, tipoReconhecido);
-      state = getState(userId);
-      const pergunta = getPerguntaAtual(state);
-      console.log('[Chat] Workflow iniciado:', tipoReconhecido, 'Pergunta:', pergunta);
-      return res.json({
-        success: true,
-        resposta: `📄 Ótimo! Vamos criar um ${tipoReconhecido}. ${pergunta}`,
-        dadosExtraidos: state.workflowState.data,
-        dadosFaltantes: [getCampoAtual(state)!],
-        tipoDocumento: state.workflowState.workflowName,
-      });
+    return res.json(buildResponse(
+      'Que tipo de documento você precisa?\n\n**contrato** · **proposta** · **relatório** · **orçamento**',
+      state
+    ));
+  }
+
+  // ── WORKFLOW ATIVO — extração e avanço ────────────────────
+  const currentGroup = getCurrentGroup(state);
+  if (!currentGroup) {
+    await deleteState(userId);
+    return res.json(buildResponse('⚠️ Erro de estado interno. Vamos recomeçar.', await getState(userId)));
+  }
+
+  // Garante conversationId caso o estado veio de sessão anterior sem ele
+  state = await ensureConversationInState(userId, state);
+
+  const workflowDef = workflows[state.workflowName!];
+  const camposPendentes = workflowDef.steps.filter(s =>
+    state.pendingFieldsInCurrentGroup.includes(s.field)
+  );
+
+  const extracted = await extrairMultiplosCampos(message, camposPendentes, currentGroup.label);
+
+  logger.debug({ userId, group: currentGroup.id, extracted: Object.keys(extracted) }, '[Chat] Campos extraídos');
+
+  const { newState, savedFields, invalidFields, stillMissing } = await applyFields(userId, extracted);
+  // Reaplica conversationId e incrementa turnNumber no estado atualizado
+  const turnNumber = (state.turnNumber ?? 0) + 1;
+  state = { ...newState, conversationId: state.conversationId, turnNumber };
+  await setState(userId, state);
+
+  // Monta resposta textual
+  let resposta = '';
+
+  if (savedFields.length > 0) {
+    const totalNoGroup = currentGroup.fields.length;
+    const allSaved = savedFields.length >= totalNoGroup - invalidFields.length;
+    if (allSaved && invalidFields.length === 0) {
+      resposta += `✅ **${currentGroup.label}** registrado.\n\n`;
     } else {
-      return res.json({
-        success: true,
-        resposta: 'Que tipo de documento você quer criar? (contrato, proposta, relatório ou orçamento)',
-        dadosExtraidos: {},
-        dadosFaltantes: [],
-        tipoDocumento: null,
-      });
+      const nomes = savedFields.map(f => FIELD_LABELS[f] ?? f.replace(/_/g, ' ')).join(', ');
+      resposta += `✅ Recebi: **${nomes}**.\n\n`;
     }
   }
 
-  // Workflow em andamento (caso já finalizado por acaso – redundante)
-  if (isConversaFinalizada(state)) {
-    const resumo = Object.entries(state.workflowState.data)
-      .map(([k, v]) => `• **${k}**: ${v}`)
-      .join('\n');
-    return res.json({
-      success: true,
-      resposta: `✅ **Documento pronto!**\n\n${resumo}\n\nDigite "sim" para gerar o PDF ou "corrigir [campo]" para alterar.`,
-      dadosExtraidos: state.workflowState.data,
-      dadosFaltantes: [],
-      tipoDocumento: state.workflowState.workflowName,
-      aguardandoConfirmacao: true,
-    });
+  if (invalidFields.length > 0) {
+    resposta += `⚠️ Atenção com o formato:\n${invalidFields.map(e => `• ${e.error}`).join('\n')}\n\n`;
   }
 
-  const campoAtual = getCampoAtual(state);
-  if (!campoAtual) {
-    resetState(userId);
-    return res.json({
-      success: true,
-      resposta: '⚠️ Erro. Vamos recomeçar. Que documento você quer criar?',
-      dadosExtraidos: {},
-      dadosFaltantes: [],
-      tipoDocumento: null,
-    });
+  if (savedFields.length === 0 && invalidFields.length === 0) {
+    resposta += '🤔 Não consegui identificar as informações. ';
   }
 
-  // Extrair valor
-  let valorExtraido = await extrairCampo(message, campoAtual);
-  console.log(`[Chat] Valor extraído para ${campoAtual}: "${valorExtraido}"`);
+  // ── Log turn no Supabase (fire-and-forget — não bloqueia a resposta) ──
+  logTurn({
+    userId,
+    conversationId: state.conversationId!,
+    turnNumber,
+    userMessage: message,
+    aiResponse: resposta,
+    groupId: currentGroup.id,
+    extractedFields: extracted,
+    savedFields,
+  });
 
-  // Obter step atual para validação
-  const workflowDef = state.workflowState.workflowName ? workflows[state.workflowState.workflowName] : null;
-  const step: WorkflowStep | undefined = workflowDef?.steps.find((s: WorkflowStep) => s.field === campoAtual);
-  const validador = step?.validator;
-
-  if (valorExtraido && validador && !validador(valorExtraido)) {
-    const exemplo = step?.example ? ` (ex: ${step.example})` : '';
-    return res.json({
-      success: true,
-      resposta: `❌ ${step?.errorMessage || 'Formato inválido'}. ${step?.question}${exemplo}`,
-      dadosExtraidos: state.workflowState.data,
-      dadosFaltantes: [campoAtual],
-      tipoDocumento: state.workflowState.workflowName,
-    });
+  // ── Workflow concluído ─────────────────────────────────────
+  if (isWorkflowComplete(state)) {
+    const resumo = buildResumoFormatado(state);
+    const respostaFinal = `✅ **Coleta concluída!**\n\n${resumo}\n\nClique em **Gerar PDF** para baixar seu documento, ou diga **"corrigir [campo]"** para ajustar algo.`;
+    completeConversation(state.conversationId!, state.data);
+    return res.json(buildResponse(respostaFinal, state, true));
   }
 
-  if (!valorExtraido) {
-    const pergunta = getPerguntaAtual(state);
-    const exemplo = step?.example ? ` (ex: ${step.example})` : '';
-    return res.json({
-      success: true,
-      resposta: `🤔 Não entendi. ${pergunta}${exemplo}`,
-      dadosExtraidos: state.workflowState.data,
-      dadosFaltantes: [campoAtual],
-      tipoDocumento: state.workflowState.workflowName,
-    });
-  }
-
-  const result = await avançarEtapa(userId, valorExtraido);
-  if (!result.success) {
-    return res.json({
-      success: true,
-      resposta: `❌ ${result.error}. ${getPerguntaAtual(state)}`,
-      dadosExtraidos: state.workflowState.data,
-      dadosFaltantes: [campoAtual],
-      tipoDocumento: state.workflowState.workflowName,
-    });
-  }
-
-  state = getState(userId);
-  console.log('[Chat] Estado após avanço:', JSON.stringify(state.workflowState, null, 2));
-
-  if (isConversaFinalizada(state)) {
-    const resumo = Object.entries(state.workflowState.data)
-      .map(([k, v]) => `• **${k}**: ${v}`)
-      .join('\n');
-    return res.json({
-      success: true,
-      resposta: `✅ **Coleta concluída!**\n\n${resumo}\n\nDigite "sim" para gerar o PDF ou "corrigir [campo]" para alterar.`,
-      dadosExtraidos: state.workflowState.data,
-      dadosFaltantes: [],
-      tipoDocumento: state.workflowState.workflowName,
-      aguardandoConfirmacao: true,
-    });
+  const nextQuestion = getCurrentGroupQuestion(state);
+  if (stillMissing.length > 0 && savedFields.length === 0) {
+    resposta += nextQuestion ?? 'Por favor, forneça as informações solicitadas.';
   } else {
-    const proximaPergunta = getPerguntaAtual(state);
-    return res.json({
-      success: true,
-      resposta: proximaPergunta,
-      dadosExtraidos: state.workflowState.data,
-      dadosFaltantes: [getCampoAtual(state)!],
-      tipoDocumento: state.workflowState.workflowName,
-    });
+    resposta += nextQuestion ?? 'Prosseguindo...';
   }
+
+  return res.json(buildResponse(resposta, state));
 };

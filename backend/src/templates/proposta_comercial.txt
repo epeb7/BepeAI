@@ -1,0 +1,35 @@
+PROPOSTA COMERCIAL
+
+Empresa: {{empresa}}
+CNPJ: {{cnpj}}
+Responsável: {{responsavel}}
+
+APRESENTAÇÃO
+
+Apresentamos a seguir nossa proposta comercial para os serviços solicitados, elaborada com base nas necessidades apresentadas.
+
+OBJETO
+
+Os serviços a serem prestados contemplam as atividades acordadas entre as partes, conforme detalhado durante o processo de levantamento de requisitos.
+
+PRAZO DE ENTREGA
+
+Prazo estimado para conclusão: {{prazo}}.
+
+CONDIÇÕES FINANCEIRAS
+
+Valor total dos serviços: R$ {{valor}}
+
+VALIDADE DA PROPOSTA
+
+Esta proposta é válida por 30 (trinta) dias corridos a partir da data de emissão.
+
+ACEITE
+
+A confirmação desta proposta deve ser realizada por escrito, por e-mail ou assinatura do documento.
+
+Atenciosamente,
+
+__________________________
+{{responsavel}}
+{{empresa}}

@@ -1,40 +1,72 @@
 CONTRATO DE PRESTAÇÃO DE SERVIÇOS
 
+Pelo presente instrumento particular de Contrato de Prestação de Serviços, as partes abaixo qualificadas têm entre si justo e contratado o seguinte:
+
 CONTRATANTE: {{contratante_empresa}}, pessoa jurídica de direito privado, inscrita no CNPJ/MF sob o nº {{contratante_cnpj}}, com sede em {{contratante_endereco}}, na cidade de {{contratante_cidade}}, estado {{contratante_estado}}, neste ato representada por seu(sua) {{contratante_cargo}}, {{contratante_nome}}, {{contratante_nacionalidade}}, {{contratante_estado_civil}}, {{contratante_profissao}}, portador(a) do RG nº {{contratante_rg}}, inscrito(a) no CPF/MF sob o nº {{contratante_cpf}}.
 
 CONTRATADO: {{contratado_empresa}}, pessoa jurídica de direito privado, inscrita no CNPJ/MF sob o nº {{contratado_cnpj}}, com sede em {{contratado_endereco}}, na cidade de {{contratado_cidade}}, estado {{contratado_estado}}, neste ato representada por seu(sua) {{contratado_cargo}}, {{contratado_nome}}, {{contratado_nacionalidade}}, {{contratado_estado_civil}}, {{contratado_profissao}}, portador(a) do RG nº {{contratado_rg}}, inscrito(a) no CPF/MF sob o nº {{contratado_cpf}}.
 
-Cláusula 1 – Objeto
-O presente contrato tem por objeto a prestação dos serviços de {{objeto_servicos}}.
+Cláusula 1ª – Do Objeto
 
-Cláusula 2 – Prazo
-Os serviços terão início em {{data_inicio}} e término em {{data_fim}}, podendo ser prorrogados mediante acordo entre as partes.
+O presente contrato tem por objeto a prestação, pelo CONTRATADO ao CONTRATANTE, dos seguintes serviços: {{objeto_servicos}}, doravante denominados simplesmente "Serviços", nas condições e termos estabelecidos neste instrumento.
 
-Cláusula 3 – Remuneração
-O CONTRATANTE pagará ao CONTRATADO a quantia de R$ {{valor_total}}, em {{forma_pagamento}}, até o dia {{dia_pagamento}} de cada mês.
+Parágrafo único. Os Serviços serão executados pelo CONTRATADO com autonomia técnica, sem vínculo de subordinação hierárquica, não se estabelecendo, portanto, qualquer relação de emprego entre as partes.
 
-Cláusula 4 – Obrigações do CONTRATADO
-- Executar os serviços conforme especificado.
-- Cumprir prazos acordados.
-- Manter sigilo sobre informações do CONTRATANTE.
+Cláusula 2ª – Do Prazo
 
-Cláusula 5 – Obrigações do CONTRATANTE
-- Fornecer informações e materiais necessários.
-- Efetuar os pagamentos nos prazos estipulados.
+O presente contrato terá vigência pelo período compreendido entre {{data_inicio}} e {{data_fim}}, podendo ser prorrogado mediante acordo escrito entre as partes, com antecedência mínima de 30 (trinta) dias antes do término do prazo estabelecido.
 
-Cláusula 6 – Rescisão
-O contrato poderá ser rescindido por qualquer das partes mediante aviso prévio de {{aviso_previo}} dias, sem prejuízo das obrigações já assumidas.
+Cláusula 3ª – Da Remuneração
 
-Cláusula 7 – Foro
-Fica eleito o foro da comarca de {{foro_comarca}} para dirimir quaisquer dúvidas oriundas deste contrato.
+Pela execução dos Serviços, o CONTRATANTE pagará ao CONTRATADO a importância total de R$ {{valor_total}} ({{valor_total_extenso}}), de forma {{forma_pagamento}}, com vencimento no dia {{dia_pagamento}} de cada mês, mediante emissão de nota fiscal/recibo.
 
-E, por estarem assim justos e contratados, assinam o presente instrumento em duas vias de igual teor.
+§ 1º O pagamento será realizado por meio de transferência bancária ou outra forma acordada entre as partes.
 
-Cidade: {{cidade_assinatura}}
-Data: {{data_assinatura}}
+§ 2º Em caso de atraso no pagamento, incidirão multa de 2% (dois por cento) sobre o valor devido, acrescida de juros de mora de 1% (um por cento) ao mês, calculados pro rata die.
 
-__________________________
-CONTRATANTE
+Cláusula 4ª – Das Obrigações do CONTRATADO
 
-__________________________
-CONTRATADO
+Constituem obrigações do CONTRATADO:
+
+a) Executar os Serviços contratados com diligência, competência e nos prazos acordados;
+b) Manter absoluto sigilo sobre informações, dados e documentos do CONTRATANTE aos quais tiver acesso;
+c) Comunicar ao CONTRATANTE, com antecedência, qualquer dificuldade que possa comprometer a execução dos Serviços;
+d) Responder, civil e criminalmente, por danos causados ao CONTRATANTE ou a terceiros em decorrência da má execução dos Serviços;
+e) Arcar com todos os tributos, encargos trabalhistas, previdenciários e sociais decorrentes da sua atividade.
+
+Cláusula 5ª – Das Obrigações do CONTRATANTE
+
+Constituem obrigações do CONTRATANTE:
+
+a) Fornecer ao CONTRATADO todas as informações, materiais e recursos necessários à adequada execução dos Serviços;
+b) Efetuar os pagamentos nos prazos e condições estipulados neste contrato;
+c) Comunicar ao CONTRATADO, com antecedência razoável, eventuais alterações no escopo dos Serviços;
+d) Garantir ao CONTRATADO acesso às instalações e sistemas necessários à execução dos Serviços.
+
+Cláusula 6ª – Da Propriedade Intelectual
+
+Todos os trabalhos, criações, desenvolvimentos e resultados produzidos pelo CONTRATADO em decorrência deste contrato serão de exclusiva propriedade do CONTRATANTE, que poderá utilizá-los livremente, independentemente de qualquer pagamento adicional.
+
+Cláusula 7ª – Da Confidencialidade
+
+As partes comprometem-se a manter em absoluto sigilo todas as informações técnicas, comerciais, financeiras ou de qualquer outra natureza a que tiverem acesso em virtude deste contrato, obrigação esta que subsistirá pelo prazo de 5 (cinco) anos após o encerramento deste instrumento.
+
+Cláusula 8ª – Da Rescisão
+
+Este contrato poderá ser rescindido:
+
+a) Por qualquer das partes, mediante notificação escrita com antecedência mínima de {{aviso_previo}} ({{aviso_previo_extenso}}) dias;
+b) De imediato, por qualquer das partes, em caso de descumprimento de quaisquer das cláusulas deste instrumento, sem prejuízo das perdas e danos cabíveis;
+c) Por mútuo acordo, formalizado por escrito.
+
+Parágrafo único. Em caso de rescisão antecipada sem justa causa pelo CONTRATANTE, serão devidos ao CONTRATADO os valores proporcionais aos Serviços já executados até a data da rescisão.
+
+Cláusula 9ª – Do Foro
+
+As partes elegem o foro da Comarca de {{foro_comarca}}, Estado de {{contratante_estado}}, como competente para dirimir quaisquer litígios ou controvérsias oriundos do presente contrato, com expressa renúncia a qualquer outro, por mais privilegiado que seja.
+
+E, por estarem assim justas e contratadas, as partes assinam o presente instrumento em 2 (duas) vias de igual teor e forma, na presença das testemunhas abaixo.
+
+LOCAL_ASSINATURA: {{cidade_assinatura}}, {{data_assinatura_formatada}}
+
+ASSINATURAS

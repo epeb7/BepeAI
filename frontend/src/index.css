@@ -2,97 +2,139 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-    --radius: 0.5rem;
-  }
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;1,14..32,400&display=swap');
 
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-  }
+/* ── Design tokens ─────────────────────────────────────────── */
+:root {
+  /* Surface scale */
+  --c-base:       218 20% 9%;
+  --c-s1:         220 18% 12%;
+  --c-s2:         220 16% 15%;
+  --c-s3:         220 14% 19%;
+  --c-s4:         220 12% 24%;
+
+  /* Borders */
+  --c-border-1:   220 14% 18%;
+  --c-border-2:   220 12% 24%;
+  --c-border-3:   220 10% 32%;
+
+  /* Text */
+  --c-text-1:     215 18% 90%;
+  --c-text-2:     215 12% 62%;
+  --c-text-3:     215 10% 44%;
+  --c-text-4:     215 8%  30%;
+
+  /* Brand — extraído da logo #5B3DF5 → #3B1DFF */
+  --brand-h:      250;
+  --brand-s:      85%;
+  --brand:        250 85% 60%;       /* #5B3DF5 mid */
+  --brand-light:  250 85% 70%;       /* hover/glow */
+  --brand-dim:    250 60% 42%;       /* muted accent */
+  --brand-glow:   250 85% 60% / 0.18;
+  --brand-subtle: 250 60% 18%;       /* bg tint */
+
+  /* Status */
+  --c-success:  150 55% 48%;
+  --c-warn:      40 88% 54%;
+  --c-danger:     0 68% 58%;
 }
 
-* {
-  border-color: hsl(var(--border));
-}
+/* ── Reset ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { font-size: 14px; }
 
 body {
-  background-color: hsl(var(--background));
-  color: hsl(var(--foreground));
+  margin: 0;
+  background: hsl(var(--c-base));
+  color: hsl(var(--c-text-1));
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-feature-settings: 'cv11','cv02','cv03','cv04';
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Animação de fade-in-up para as mensagens */
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-fade-in-up {
-  animation: fadeInUp 0.2s ease-out;
-}
-
-/* Customização da barra de rolagem (opcional, para tema escuro) */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #1f2937;
-  border-radius: 4px;
-}
-
+/* ── Scrollbar ─────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: #4b5563;
-  border-radius: 4px;
+  background: hsl(var(--c-border-2));
+  border-radius: 99px;
+  transition: background 0.2s;
+}
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--c-border-3)); }
+
+/* ── Selection ─────────────────────────────────────────────── */
+::selection {
+  background: hsl(var(--brand) / 0.25);
+  color: hsl(var(--c-text-1));
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #6b7280;
+/* ── Animations ────────────────────────────────────────────── */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes dotPulse {
+  0%, 80%, 100% { transform: scale(0.55); opacity: 0.35; }
+  40%           { transform: scale(1.0);  opacity: 1;    }
+}
+@keyframes brandPing {
+  0%   { transform: scale(1);    opacity: 0.6; }
+  80%  { transform: scale(2.2);  opacity: 0;   }
+  100% { transform: scale(2.2);  opacity: 0;   }
+}
+@keyframes gradientFlow {
+  0%   { background-position: 0%   50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0%   50%; }
+}
+@keyframes inputGlow {
+  0%   { box-shadow: 0 0 0 0   hsl(var(--brand) / 0.0); }
+  50%  { box-shadow: 0 0 0 3px hsl(var(--brand) / 0.18); }
+  100% { box-shadow: 0 0 0 3px hsl(var(--brand) / 0.12); }
+}
+@keyframes shimmerSweep {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
+.animate-slide-up   { animation: slideUp   0.2s cubic-bezier(0.22,1,0.36,1) both; }
+.animate-dot-pulse  { animation: dotPulse  1.4s ease-in-out infinite; }
+.animate-brand-ping { animation: brandPing 2s cubic-bezier(0,0,0.2,1) infinite; }
+
+/* ── Gradient text ─────────────────────────────────────────── */
+.brand-text {
+  background: linear-gradient(135deg, hsl(250 85% 72%), hsl(215 85% 62%));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ── Brand button ──────────────────────────────────────────── */
+.btn-brand {
+  position: relative;
+  background: linear-gradient(135deg, hsl(250 85% 55%), hsl(215 85% 52%));
+  background-size: 200% 200%;
+  transition: background-position 0.4s ease, box-shadow 0.2s ease, transform 0.1s ease;
+  box-shadow: 0 4px 20px hsl(var(--brand) / 0.28);
+}
+.btn-brand:hover {
+  background-position: 100% 0%;
+  box-shadow: 0 6px 28px hsl(var(--brand) / 0.40);
+}
+.btn-brand:active { transform: translateY(1px); }
+
+/* ── Glass card ─────────────────────────────────────────────── */
+.glass-card {
+  background: hsl(var(--c-s1));
+  border: 1px solid hsl(var(--c-border-1));
+  backdrop-filter: blur(12px);
+}
+
+/* ── Focus ring ─────────────────────────────────────────────── */
+.focus-brand:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px hsl(var(--brand) / 0.45);
 }

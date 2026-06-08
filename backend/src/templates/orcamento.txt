@@ -1,0 +1,37 @@
+ORÇAMENTO
+
+Empresa: {{empresa}}
+Vigência: {{dataInicio}} a {{dataFim}}
+
+DESCRIÇÃO DOS SERVIÇOS / PRODUTOS
+
+Este orçamento contempla os serviços e/ou produtos solicitados pela parte interessada, conforme especificações levantadas.
+
+PERÍODO DE EXECUÇÃO
+
+Início: {{dataInicio}}
+Término: {{dataFim}}
+
+COMPOSIÇÃO DE VALORES
+
+Os valores apresentados incluem todos os custos necessários para a realização completa do escopo descrito.
+
+VALOR TOTAL
+
+R$ {{valor}}
+
+CONDIÇÕES DE PAGAMENTO
+
+A serem definidas entre as partes após aceite deste orçamento.
+
+OBSERVAÇÕES
+
+- Os valores podem sofrer reajuste após o prazo de validade de 15 dias.
+- Alterações de escopo implicarão revisão dos valores apresentados.
+- Este orçamento não constitui contrato, sendo necessária a formalização por instrumento próprio.
+
+ACEITE
+
+__________________________
+Responsável
+{{empresa}}

@@ -1,61 +1,90 @@
-// conversation.service.ts
-import * as workflowEngine from './workflow.service';
-import { workflows } from '../workflows/definitions';
+/**
+ * Conversation Service
+ *
+ * Gerencia o ciclo de vida das sessões de conversa.
+ * Usa SessionStore como abstração — swap para Redis sem alterar este arquivo.
+ */
 
-export interface ConversaState {
-  workflowState: workflowEngine.WorkflowState;
-}
+import { createSessionStore } from '../lib/session.store';
+import {
+  WorkflowState,
+  createEmptyState,
+  startWorkflow,
+  getCurrentGroup,
+  getCurrentGroupQuestion,
+  getCurrentGroupExample,
+  applyExtractedFields,
+  isWorkflowComplete,
+  rollbackToField,
+  getProgressInfo,
+  ApplyResult,
+} from './workflow.service';
 
-const estados = new Map<string, ConversaState>();
+export type { WorkflowState } from './workflow.service';
 
-export function getState(userId: string): ConversaState {
-  if (!estados.has(userId)) {
-    estados.set(userId, { workflowState: workflowEngine.createEmptyState() });
+const store = createSessionStore<WorkflowState>(86_400); // TTL: 24h
+
+// ============================================================
+// CRUD de sessão
+// ============================================================
+
+export async function getState(userId: string): Promise<WorkflowState> {
+  const state = await store.get(userId);
+  if (!state) {
+    const empty = createEmptyState();
+    await store.set(userId, empty);
+    return empty;
   }
-  return estados.get(userId)!;
+  return state;
 }
 
-export function setTipoDocumento(userId: string, tipo: string) {
-  const state = getState(userId);
-  state.workflowState = workflowEngine.startWorkflow(tipo);
-  estados.set(userId, state);
+export async function setState(userId: string, state: WorkflowState): Promise<void> {
+  await store.set(userId, state);
 }
 
-export function getCampoAtual(state: ConversaState): string | null {
-  const step = workflowEngine.getCurrentStep(state.workflowState);
-  return step ? step.field : null;
+export async function deleteState(userId: string): Promise<void> {
+  await store.delete(userId);
 }
 
-export function getPerguntaAtual(state: ConversaState): string | null {
-  return workflowEngine.getCurrentQuestion(state.workflowState);
+// ============================================================
+// Operações de workflow
+// ============================================================
+
+export async function initWorkflow(userId: string, tipo: string): Promise<WorkflowState> {
+  const state = startWorkflow(tipo);
+  await store.set(userId, state);
+  return state;
 }
 
-export async function avançarEtapa(userId: string, valor: string): Promise<{ success: boolean; error?: string }> {
-  const state = getState(userId);
-  const campoAtual = getCampoAtual(state);
-  if (!campoAtual) return { success: false, error: 'Nenhum campo ativo' };
-  const result = workflowEngine.applyFieldValue(state.workflowState, campoAtual, valor);
-  if (result.error) return { success: false, error: result.error };
-  state.workflowState = result.newState;
-  estados.set(userId, state);
-  return { success: true };
+export async function applyFields(
+  userId: string,
+  extracted: Record<string, string>
+): Promise<ApplyResult> {
+  const state = await getState(userId);
+  const result = applyExtractedFields(state, extracted);
+  await store.set(userId, result.newState);
+  return result;
 }
 
-export function isConversaFinalizada(state: ConversaState): boolean {
-  return workflowEngine.isWorkflowComplete(state.workflowState);
+export async function rollback(
+  userId: string,
+  field: string
+): Promise<WorkflowState | null> {
+  const state = await getState(userId);
+  const newState = rollbackToField(state, field);
+  if (!newState) return null;
+  await store.set(userId, newState);
+  return newState;
 }
 
-export function resetState(userId: string) {
-  estados.delete(userId);
-}
+// ============================================================
+// Re-exports de leitura pura (sem efeito em store)
+// ============================================================
 
-export function getDadosCompletos(userId: string): Record<string, string> {
-  return getState(userId).workflowState.data;
-}
-
-// Validadores expostos para uso externo (opcional)
-export const validadores = {
-  cnpj: (v: string) => /^\d{14}$/.test(v),
-  data: (v: string) => /^\d{2}\/\d{2}\/\d{4}$/.test(v),
-  valor: (v: string) => /^\d+(?:[.,]\d+)?$/.test(v),
+export {
+  getCurrentGroup,
+  getCurrentGroupQuestion,
+  getCurrentGroupExample,
+  isWorkflowComplete,
+  getProgressInfo,
 };

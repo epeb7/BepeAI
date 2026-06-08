@@ -1,17 +1,25 @@
-// frontend/src/services/groq.service.ts
 import api from './api';
 
-export interface MensagemHistorico {
-  role: 'user' | 'assistant';
-  content: string;
+export interface ProgressInfo {
+  currentGroup: number;
+  totalGroups: number;
+  currentGroupLabel: string;
+  completedFields: number;
+  totalFields: number;
+  isComplete: boolean;
 }
 
 export interface ChatResponse {
   success: boolean;
   resposta: string;
-  dadosExtraidos: Record<string, any>;
+  dadosExtraidos: Record<string, string>;
   dadosFaltantes: string[];
-  tipoDocumento: string;
+  tipoDocumento: string | null;
+  aguardandoConfirmacao?: boolean;
+  readyToDownload?: boolean;
+  progress?: ProgressInfo;
+  exampleBlock?: string | null;
+  conversationId?: string | null;
 }
 
 export const sendMessage = async (message: string): Promise<ChatResponse> => {
@@ -19,9 +27,14 @@ export const sendMessage = async (message: string): Promise<ChatResponse> => {
   return response.data;
 };
 
-export const generatePDF = async (dados: any, logoBase64?: string): Promise<Blob> => {
-  const response = await api.post('/pdf/generate', { dados, logoBase64 }, {
-    responseType: 'blob',
-  });
+export const generatePDF = async (
+  dados: Record<string, string>,
+  logoBase64?: string
+): Promise<Blob> => {
+  const response = await api.post(
+    '/pdf/generate',
+    { dados, logoBase64 },
+    { responseType: 'blob' }
+  );
   return response.data;
 };
