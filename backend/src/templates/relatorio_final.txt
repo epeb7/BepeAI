@@ -1,30 +1,51 @@
 RELATÓRIO FINAL
 
-Empresa: {{empresa}}
-Período: {{dataInicio}} a {{dataFim}}
+EMPRESA: {{empresa}}, inscrita no CNPJ/MF sob o nº {{cnpj}}.
 
-SUMÁRIO EXECUTIVO
+RESPONSÁVEL: {{responsavel}}, {{cargo_responsavel}}.
 
-O presente relatório consolida as atividades, resultados e conclusões do período compreendido entre {{dataInicio}} e {{dataFim}}, referente às operações da empresa {{empresa}}.
+PERÍODO: {{data_inicio}} a {{data_fim}}
 
-ESCOPO
+Cláusula 1ª – Identificação
 
-Este documento apresenta um panorama completo das atividades realizadas no período indicado, incluindo análises, métricas e recomendações pertinentes.
+O presente relatório, intitulado "{{titulo_relatorio}}", consolida as atividades, resultados e conclusões do período compreendido entre {{data_inicio}} e {{data_fim}}, referente às operações conduzidas pela {{empresa}}, sendo elaborado por {{responsavel}}, na qualidade de {{cargo_responsavel}}.
 
-ATIVIDADES REALIZADAS
+Parágrafo único. Este documento tem caráter confidencial e destina-se exclusivamente ao uso interno da {{empresa}} e às partes expressamente autorizadas. Sua reprodução ou divulgação parcial ou integral a terceiros requer autorização formal da diretoria.
 
-Durante o período de {{dataInicio}} a {{dataFim}}, foram executadas as atividades previstas conforme planejamento estabelecido.
+Cláusula 2ª – Sumário Executivo
 
-RESULTADOS OBTIDOS
+{{resumo_executivo}}
 
-Os resultados alcançados no período demonstram o desempenho das iniciativas implementadas pela equipe da {{empresa}}.
+Parágrafo único. O sumário acima sintetiza os principais eventos, decisões e contextos que pautaram as atividades do período, servindo de referência para a compreensão dos resultados detalhados na Cláusula 3ª.
 
-CONCLUSÕES E RECOMENDAÇÕES
+Cláusula 3ª – Principais Resultados
 
-Com base nos dados e análises realizadas, recomenda-se a continuidade das ações bem-sucedidas e o ajuste das estratégias que apresentaram oportunidades de melhoria.
+Os resultados alcançados no período de {{data_inicio}} a {{data_fim}} foram:
 
-APROVAÇÃO
+a) {{principais_resultados}}.
 
-__________________________
-Responsável
-{{empresa}}
+§ 1º Os resultados acima refletem o desempenho das iniciativas implementadas pela equipe da {{empresa}} ao longo do período analisado.
+
+§ 2º Os indicadores apurados devem ser analisados em conjunto com as condições de mercado vigentes no período, conforme contextualização apresentada no Sumário Executivo.
+
+Cláusula 4ª – Conclusões e Recomendações
+
+Com base nas análises realizadas e nos resultados obtidos, recomenda-se para o próximo período:
+
+{{recomendacoes}}
+
+§ 1º As recomendações acima foram elaboradas considerando os indicadores de desempenho apurados, as tendências de mercado identificadas e os objetivos estratégicos da {{empresa}}.
+
+§ 2º A implementação das recomendações descritas deverá ser acompanhada por cronograma de execução, designação de responsáveis e definição de métricas de acompanhamento, a serem estabelecidos em plano de ação específico.
+
+Cláusula 5ª – Metodologia e Fontes
+
+As análises contidas neste relatório foram elaboradas com base em dados internos da {{empresa}}, pesquisa documental e observação direta das operações, assegurando a fidedignidade e rastreabilidade das informações apresentadas.
+
+Parágrafo único. Em caso de divergência entre as informações deste relatório e outros registros internos, prevalecerão os dados primários devidamente documentados e homologados pelo responsável pela elaboração.
+
+Cláusula 6ª – Aprovação e Arquivamento
+
+O presente relatório está sujeito à aprovação formal da direção da {{empresa}}, devendo ser arquivado em conformidade com as políticas internas de gestão documental, com prazo de retenção mínimo de 5 (cinco) anos.
+
+RELATORIO_ASSINATURA

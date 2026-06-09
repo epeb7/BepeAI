@@ -22,8 +22,10 @@ export interface ChatResponse {
   conversationId?: string | null;
 }
 
-export const sendMessage = async (message: string): Promise<ChatResponse> => {
-  const response = await api.post('/chat', { message });
+export const sendMessage = async (message: string, conversationId?: string | null): Promise<ChatResponse> => {
+  const headers: Record<string, string> = {};
+  if (conversationId) headers['x-conversation-id'] = conversationId;
+  const response = await api.post('/chat', { message }, { headers });
   return response.data;
 };
 

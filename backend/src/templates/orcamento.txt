@@ -1,37 +1,58 @@
 ORÇAMENTO
 
-Empresa: {{empresa}}
-Vigência: {{dataInicio}} a {{dataFim}}
+EMITENTE: {{empresa_emitente}}, pessoa jurídica de direito privado, inscrita no CNPJ/MF sob o nº {{cnpj_emitente}}, responsável: {{responsavel_emitente}}, telefone: {{telefone_emitente}}.
 
-DESCRIÇÃO DOS SERVIÇOS / PRODUTOS
+SOLICITANTE: {{cliente_nome}}, CNPJ/CPF: {{cliente_cnpj_cpf}}.
 
-Este orçamento contempla os serviços e/ou produtos solicitados pela parte interessada, conforme especificações levantadas.
+Data de emissão: {{data_emissao}}
 
-PERÍODO DE EXECUÇÃO
+Cláusula 1ª – Do Objeto
 
-Início: {{dataInicio}}
-Término: {{dataFim}}
+O presente orçamento refere-se ao fornecimento dos seguintes produtos e/ou serviços: {{descricao_itens}}.
 
-COMPOSIÇÃO DE VALORES
+Parágrafo único. O presente orçamento é emitido com base nas especificações fornecidas pelo Solicitante, sendo responsabilidade deste a verificação da completude e exatidão das informações prestadas.
 
-Os valores apresentados incluem todos os custos necessários para a realização completa do escopo descrito.
+Cláusula 2ª – Da Composição de Valores
 
-VALOR TOTAL
+a) Descrição: {{descricao_itens}};
+b) Quantidade/Unidade: {{quantidade_unidade}};
+c) Valor unitário: R$ {{valor_unitario}};
+d) Valor total: R$ {{valor_total}} ({{valor_total_extenso}}).
 
-R$ {{valor}}
+§ 1º Os valores apresentados incluem todos os custos necessários para a realização completa do escopo descrito, exceto tributos e encargos de responsabilidade exclusiva do solicitante, salvo disposição expressa em contrário.
 
-CONDIÇÕES DE PAGAMENTO
+§ 2º Os preços constantes deste orçamento são fixos e irreajustáveis durante o prazo de validade estabelecido na Cláusula 5ª.
 
-A serem definidas entre as partes após aceite deste orçamento.
+Cláusula 3ª – Do Prazo de Execução
 
-OBSERVAÇÕES
+O prazo estimado para execução e/ou entrega é de {{prazo_execucao}}, contado a partir da data de aceite e pagamento inicial conforme condições definidas na Cláusula 4ª.
 
-- Os valores podem sofrer reajuste após o prazo de validade de 15 dias.
-- Alterações de escopo implicarão revisão dos valores apresentados.
-- Este orçamento não constitui contrato, sendo necessária a formalização por instrumento próprio.
+Parágrafo único. O prazo acima pressupõe a disponibilização imediata, pelo Solicitante, de todos os materiais, informações e acessos necessários à execução. Eventuais atrasos na entrega desses insumos resultarão em reprogramação proporcional do cronograma.
 
-ACEITE
+Cláusula 4ª – Das Condições de Pagamento
 
-__________________________
-Responsável
-{{empresa}}
+Forma de pagamento: {{forma_pagamento}}.
+
+§ 1º O não pagamento no prazo acordado ensejará a incidência de multa moratória de 2% (dois por cento) sobre o valor em aberto, acrescida de juros moratórios de 1% (um por cento) ao mês, calculados pro rata die.
+
+§ 2º A emissão da nota fiscal ou recibo competente condicionará o início da execução dos serviços ou entrega dos produtos, salvo acordo escrito específico entre as partes.
+
+Cláusula 5ª – Da Validade
+
+Este orçamento é válido por {{validade_orcamento}} dias corridos a partir da data de emissão.
+
+a) Os valores poderão sofrer reajuste após o prazo de validade, conforme variação dos custos de insumos, mão de obra e índices de mercado;
+b) Alterações de escopo solicitadas pelo contratante implicarão revisão dos valores apresentados e novo orçamento;
+c) Este orçamento não constitui contrato, sendo necessária a formalização por instrumento próprio após aceite.
+
+Cláusula 6ª – Das Responsabilidades e Garantias
+
+a) O emitente garante que os produtos e serviços descritos neste orçamento atendem às especificações técnicas indicadas;
+b) Eventuais vícios ou defeitos verificados no prazo de garantia legal serão corrigidos sem ônus ao Solicitante;
+c) O Solicitante é responsável pela correta utilização dos produtos e serviços adquiridos, não cabendo ao Emitente responsabilidade por danos decorrentes de uso inadequado.
+
+Cláusula 7ª – Do Aceite
+
+ORCAMENTO_ASSINATURA
+
+LOCAL_EMISSAO: {{data_emissao}}

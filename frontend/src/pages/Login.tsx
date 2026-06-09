@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../services/api';
+import { authService } from '../services/auth.service';
 import { LogoBrain } from '../components/logo/LogoBrain';
 
-export function Login() {
+interface LoginProps { onLogin?: () => void; }
+
+export function Login({ onLogin }: LoginProps) {
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [error, setError]       = useState('');
@@ -15,9 +17,10 @@ export function Login() {
     setLoading(true);
     setError('');
     try {
-      const res = await api.post('/auth/login', { email, password });
-      if (res.data.success) {
-        localStorage.setItem('token', res.data.token);
+      const data = await authService.login(email, password);
+      if (data.success) {
+        localStorage.setItem('token', data.token);
+        onLogin?.();
         navigate('/dashboard');
       } else setError('Credenciais inválidas');
     } catch (err: unknown) {

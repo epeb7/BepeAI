@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { sendMessage, generatePDF, ProgressInfo } from '../services/groq.service';
 import api from '../services/api';
 import { getBepeLogoBase64 } from '../lib/bepeLogoBase64';
@@ -16,6 +16,36 @@ export interface Message {
   readyToDownload?: boolean;
   progress?: ProgressInfo;
   exampleBlock?: string | null;
+  // Typewriter — texto completo vs. texto visível
+  fullText?: string;
+  typing?: boolean;
+}
+
+// ── Hook: anima texto caractere a caractere ───────────────────
+export function useTypewriter(msg: Message, onDone?: () => void) {
+  const [displayed, setDisplayed] = useState(msg.typing ? '' : msg.text);
+  const doneRef = useRef(onDone);
+  doneRef.current = onDone;
+
+  useEffect(() => {
+    if (!msg.typing || !msg.fullText) return;
+    let i = 0;
+    const full = msg.fullText;
+    // Velocidade adaptativa: mensagens longas ficam mais rápidas para não travar
+    const delay = full.length > 400 ? 6 : full.length > 200 ? 10 : 14;
+    setDisplayed('');
+    const timer = setInterval(() => {
+      i++;
+      setDisplayed(full.slice(0, i));
+      if (i >= full.length) {
+        clearInterval(timer);
+        doneRef.current?.();
+      }
+    }, delay);
+    return () => clearInterval(timer);
+  }, [msg.id, msg.typing, msg.fullText]);
+
+  return displayed;
 }
 
 function generateId(): string {
@@ -42,20 +72,23 @@ export function useChat(onConversationChange?: () => void) {
     setIsLoading(true);
 
     try {
-      const response = await sendMessage(text);
+      const response = await sendMessage(text, conversationId);
 
+      const aiId = generateId();
       const aiMsg: Message = {
-        id: generateId(),
-        text: response.resposta,
+        id: aiId,
+        text: '',           // começa vazio — typewriter preenche
+        fullText: response.resposta,
+        typing: true,
         sender: 'ai',
         timestamp: new Date(),
-        dadosExtraidos:       response.dadosExtraidos,
-        dadosFaltantes:       response.dadosFaltantes,
-        tipoDocumento:        response.tipoDocumento,
+        dadosExtraidos:        response.dadosExtraidos,
+        dadosFaltantes:        response.dadosFaltantes,
+        tipoDocumento:         response.tipoDocumento,
         aguardandoConfirmacao: response.aguardandoConfirmacao,
-        readyToDownload:      response.readyToDownload,
-        progress:             response.progress,
-        exampleBlock:         response.exampleBlock,
+        readyToDownload:       response.readyToDownload,
+        progress:              response.progress,
+        exampleBlock:          response.exampleBlock,
       };
 
       setMessages(prev => [...prev, aiMsg]);
@@ -105,20 +138,43 @@ export function useChat(onConversationChange?: () => void) {
   }, []);
 
   const loadFromHistory = useCallback((detail: ConversationDetail) => {
-    const restored: Message[] = detail.turns.flatMap(turn => [
-      {
+    // Determina se a conversa está completa para saber qual mensagem recebe o botão PDF
+    const isCompleted = detail.status === 'completed';
+    const lastTurnIdx = detail.turns.length - 1;
+
+    const restored: Message[] = detail.turns.flatMap((turn, idx) => {
+      const isLastTurn = idx === lastTurnIdx;
+
+      const userMsg: Message = {
         id: `h-user-${turn.turnNumber}`,
         text: turn.userMessage,
-        sender: 'user' as const,
+        sender: 'user',
         timestamp: new Date(turn.createdAt),
-      },
-      {
+        typing: false,
+      };
+
+      const aiMsg: Message = {
         id: `h-ai-${turn.turnNumber}`,
         text: turn.aiResponse,
-        sender: 'ai' as const,
+        fullText: turn.aiResponse,
+        sender: 'ai',
         timestamp: new Date(turn.createdAt),
-      },
-    ]);
+        typing: false,
+        // Só o último turno de uma conversa completa expõe o botão PDF
+        ...(isCompleted && isLastTurn && detail.finalData
+          ? {
+              dadosExtraidos: detail.finalData,
+              dadosFaltantes: [],
+              tipoDocumento: detail.workflowType,
+              readyToDownload: true,
+              aguardandoConfirmacao: true,
+            }
+          : {}),
+      };
+
+      return [userMsg, aiMsg];
+    });
+
     setMessages(restored);
     setLatestProgress(undefined);
     setConversationId(detail.id);

@@ -1,35 +1,65 @@
 PROPOSTA COMERCIAL
 
-Empresa: {{empresa}}
-CNPJ: {{cnpj}}
-Responsável: {{responsavel}}
+EMITENTE: {{emitente_empresa}}, pessoa jurídica de direito privado, inscrita no CNPJ/MF sob o nº {{emitente_cnpj}}, com sede em {{emitente_endereco}}, neste ato representada por {{emitente_responsavel}}, {{emitente_cargo}}, e-mail: {{emitente_email}}, telefone: {{emitente_telefone}}.
 
-APRESENTAÇÃO
+DESTINATÁRIO: {{cliente_empresa}}, inscrita no CNPJ/MF sob o nº {{cliente_cnpj}}, aos cuidados de {{cliente_responsavel}}.
 
-Apresentamos a seguir nossa proposta comercial para os serviços solicitados, elaborada com base nas necessidades apresentadas.
+Cláusula 1ª – Da Apresentação
 
-OBJETO
+{{emitente_empresa}} apresenta à {{cliente_empresa}} a presente Proposta Comercial, elaborada a partir das necessidades identificadas durante o processo de levantamento de requisitos, com o compromisso de entregar soluções de excelência dentro dos padrões técnicos e prazos acordados.
 
-Os serviços a serem prestados contemplam as atividades acordadas entre as partes, conforme detalhado durante o processo de levantamento de requisitos.
+Parágrafo único. Esta proposta foi elaborada exclusivamente para {{cliente_empresa}} e suas condições são confidenciais, não podendo ser reproduzida ou utilizada por terceiros sem autorização expressa do emitente.
 
-PRAZO DE ENTREGA
+Cláusula 2ª – Do Objeto
 
-Prazo estimado para conclusão: {{prazo}}.
+Os serviços objeto desta proposta compreendem: {{descricao_servicos}}.
 
-CONDIÇÕES FINANCEIRAS
+§ 1º O escopo detalhado das entregas inclui: {{escopo_detalhado}}.
 
-Valor total dos serviços: R$ {{valor}}
+§ 2º Qualquer serviço adicional não descrito no escopo desta proposta será objeto de aditivo escrito, com revisão de prazo e valor previamente acordados entre as partes.
 
-VALIDADE DA PROPOSTA
+Cláusula 3ª – Das Condições Financeiras
 
-Esta proposta é válida por 30 (trinta) dias corridos a partir da data de emissão.
+O valor total para a execução dos serviços descritos nesta proposta é de R$ {{valor_total}} ({{valor_total_extenso}}).
 
-ACEITE
+§ 1º A forma de pagamento acordada será: {{forma_pagamento}}.
 
-A confirmação desta proposta deve ser realizada por escrito, por e-mail ou assinatura do documento.
+§ 2º Os valores propostos são líquidos e incluem todos os custos operacionais do emitente, exceto tributos e encargos de responsabilidade exclusiva do contratante, salvo disposição em contrário expressa.
 
-Atenciosamente,
+§ 3º Em caso de atraso no pagamento, incidirão multa de 2% (dois por cento) sobre o valor em atraso, acrescida de juros moratórios de 1% (um por cento) ao mês, pro rata die.
 
-__________________________
-{{responsavel}}
-{{empresa}}
+Cláusula 4ª – Do Prazo de Entrega
+
+O prazo estimado para conclusão e entrega dos serviços é de {{prazo_entrega}}, contado a partir da data de confirmação e assinatura formal desta proposta.
+
+Parágrafo único. O prazo acima está condicionado à entrega pontual de todas as informações, acessos e materiais necessários por parte do contratante. Atrasos provocados por insuficiência ou ausência de insumos do contratante resultarão em reprogramação proporcional do cronograma.
+
+Cláusula 5ª – Da Propriedade Intelectual
+
+Todos os entregáveis produzidos no âmbito desta proposta, após a quitação integral dos valores acordados, serão de exclusiva propriedade do contratante.
+
+Parágrafo único. {{emitente_empresa}} reserva o direito de mencionar o projeto em seu portfólio e materiais institucionais, sem divulgar informações confidenciais ou estratégicas do contratante, salvo autorização expressa.
+
+Cláusula 6ª – Da Validade
+
+A presente proposta é válida pelo prazo de {{validade_proposta}} dias corridos contados da data de emissão indicada neste documento.
+
+Parágrafo único. Após o vencimento desta validade, os valores e condições aqui descritos poderão ser revisados sem aviso prévio, em razão de variações de custos, câmbio ou demanda.
+
+Cláusula 7ª – Das Condições Gerais
+
+a) Alterações de escopo solicitadas pelo contratante após a confirmação desta proposta serão avaliadas e, se necessário, gerarão aditivo com revisão de prazo e valor;
+b) A prestação dos serviços será regida por contrato específico a ser firmado após aceite desta proposta;
+c) {{emitente_empresa}} poderá subcontratar parte dos serviços, mantendo integral responsabilidade pela qualidade e prazo da entrega;
+d) As partes comprometem-se a manter em sigilo os termos desta proposta e as informações trocadas durante a negociação;
+e) Esta proposta não gera qualquer obrigação para o destinatário até sua confirmação formal.
+
+Cláusula 8ª – Do Aceite
+
+A confirmação desta proposta deve ser realizada por escrito, por e-mail ou assinatura deste documento, configurando aceite integral de todos os termos e condições aqui estabelecidos.
+
+Parágrafo único. Aceita a proposta, as partes providenciarão, no prazo de até 5 (cinco) dias úteis, a celebração do instrumento contratual formal que regerá a prestação dos serviços.
+
+PROPOSTA_ASSINATURA
+
+LOCAL_EMISSAO: {{cidade_emissao}}, {{data_emissao}}

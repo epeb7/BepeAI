@@ -58,9 +58,10 @@ export async function initWorkflow(userId: string, tipo: string): Promise<Workfl
 
 export async function applyFields(
   userId: string,
-  extracted: Record<string, string>
+  extracted: Record<string, string>,
+  currentState?: WorkflowState
 ): Promise<ApplyResult> {
-  const state = await getState(userId);
+  const state = currentState ?? await getState(userId);
   const result = applyExtractedFields(state, extracted);
   await store.set(userId, result.newState);
   return result;

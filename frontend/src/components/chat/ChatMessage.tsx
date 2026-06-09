@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { FileText, Loader2, AlertCircle, RotateCcw } from 'lucide-react';
 import type { Message } from '../../hooks/useChat';
+import { useTypewriter } from '../../hooks/useChat';
 
 interface ChatMessageProps {
   message: Message;
@@ -104,14 +105,37 @@ function AiAvatar() {
   );
 }
 
+// ── Timestamp relativo ────────────────────────────────────────
+function relativeTime(date: Date): string {
+  const diff = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (diff < 10)  return 'agora';
+  if (diff < 60)  return `${diff}s atrás`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}min atrás`;
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
 // ── Main ─────────────────────────────────────────────────────
 export function ChatMessage({ message, onDownloadPDF }: ChatMessageProps) {
   const isUser = message.sender === 'user';
   const [generating, setGenerating] = useState(false);
   const [pdfError,   setPdfError]   = useState(false);
 
+  // Rastreia se o typewriter terminou neste componente
+  // Começa true se a mensagem não está digitando (histórico, reload)
+  const [typingDone, setTypingDone] = useState(!message.typing);
+
+  useEffect(() => {
+    // Se a mensagem mudou para typing=false externamente (histórico), sincroniza
+    if (!message.typing) setTypingDone(true);
+  }, [message.typing]);
+
+  // Typewriter — o onDone marca a animação como concluída e libera o botão PDF
+  const displayed = useTypewriter(message, () => setTypingDone(true));
+  const textToShow = isUser ? message.text : displayed;
+
   const canPDF =
     !isUser &&
+    typingDone &&                               // botão só aparece após typewriter terminar
     !!message.dadosExtraidos &&
     Object.keys(message.dadosExtraidos).length > 0 &&
     (message.dadosFaltantes?.length === 0 || message.readyToDownload) &&
@@ -125,7 +149,7 @@ export function ChatMessage({ message, onDownloadPDF }: ChatMessageProps) {
     finally { setGenerating(false); }
   };
 
-  const time = message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const time = relativeTime(message.timestamp);
 
   // ── User bubble ──────────────────────────────────────────
   if (isUser) {
@@ -140,7 +164,7 @@ export function ChatMessage({ message, onDownloadPDF }: ChatMessageProps) {
             boxShadow: '0 2px 12px hsl(250 85% 20% / 0.35)',
             wordBreak: 'break-word',
           }}>
-            <RenderText text={message.text} />
+            <RenderText text={textToShow} />
           </div>
           <div style={{
             textAlign: 'right', marginTop: '4px', fontSize: '10px',
@@ -167,7 +191,15 @@ export function ChatMessage({ message, onDownloadPDF }: ChatMessageProps) {
           wordBreak: 'break-word',
         }}>
           <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-            <RenderText text={message.text} />
+            <RenderText text={textToShow} />
+            {!typingDone && textToShow.length > 0 && (
+              <span style={{
+                display: 'inline-block', width: '2px', height: '14px',
+                background: 'hsl(250 60% 68%)', marginLeft: '2px',
+                verticalAlign: 'middle', borderRadius: '1px',
+                animation: 'blink 0.8s step-end infinite',
+              }} />
+            )}
           </p>
 
           {message.exampleBlock && <ExampleBlock example={message.exampleBlock} />}

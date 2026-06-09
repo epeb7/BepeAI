@@ -10,11 +10,13 @@ Cláusula 1ª – Do Objeto
 
 O presente contrato tem por objeto a prestação, pelo CONTRATADO ao CONTRATANTE, dos seguintes serviços: {{objeto_servicos}}, doravante denominados simplesmente "Serviços", nas condições e termos estabelecidos neste instrumento.
 
-Parágrafo único. Os Serviços serão executados pelo CONTRATADO com autonomia técnica, sem vínculo de subordinação hierárquica, não se estabelecendo, portanto, qualquer relação de emprego entre as partes.
+Parágrafo único. Os Serviços serão executados pelo CONTRATADO com autonomia técnica, sem subordinação hierárquica, não se estabelecendo qualquer relação de emprego entre as partes, nos termos da Lei nº 9.032/1995 e da Lei nº 13.467/2017.
 
 Cláusula 2ª – Do Prazo
 
 O presente contrato terá vigência pelo período compreendido entre {{data_inicio}} e {{data_fim}}, podendo ser prorrogado mediante acordo escrito entre as partes, com antecedência mínima de 30 (trinta) dias antes do término do prazo estabelecido.
+
+Parágrafo único. A prorrogação, quando acordada, produzirá efeitos a partir do término da vigência original, mantidas as demais condições contratuais, salvo modificação expressa.
 
 Cláusula 3ª – Da Remuneração
 
@@ -22,36 +24,50 @@ Pela execução dos Serviços, o CONTRATANTE pagará ao CONTRATADO a importânci
 
 § 1º O pagamento será realizado por meio de transferência bancária ou outra forma acordada entre as partes.
 
-§ 2º Em caso de atraso no pagamento, incidirão multa de 2% (dois por cento) sobre o valor devido, acrescida de juros de mora de 1% (um por cento) ao mês, calculados pro rata die.
+§ 2º Em caso de atraso no pagamento, incidirão multa moratória de 2% (dois por cento) sobre o valor devido, acrescida de juros de mora de 1% (um por cento) ao mês, calculados pro rata die, e correção monetária pelo IPCA/IBGE.
+
+§ 3º Fica vedado ao CONTRATANTE efetuar qualquer desconto, retenção ou compensação dos valores devidos, salvo determinação legal ou judicial expressa.
 
 Cláusula 4ª – Das Obrigações do CONTRATADO
 
 Constituem obrigações do CONTRATADO:
 
-a) Executar os Serviços contratados com diligência, competência e nos prazos acordados;
-b) Manter absoluto sigilo sobre informações, dados e documentos do CONTRATANTE aos quais tiver acesso;
-c) Comunicar ao CONTRATANTE, com antecedência, qualquer dificuldade que possa comprometer a execução dos Serviços;
-d) Responder, civil e criminalmente, por danos causados ao CONTRATANTE ou a terceiros em decorrência da má execução dos Serviços;
-e) Arcar com todos os tributos, encargos trabalhistas, previdenciários e sociais decorrentes da sua atividade.
+a) Executar os Serviços contratados com diligência, competência técnica e nos prazos acordados, empregando profissionais qualificados;
+b) Manter absoluto sigilo sobre informações, dados e documentos do CONTRATANTE aos quais tiver acesso, durante e após a vigência deste contrato;
+c) Comunicar ao CONTRATANTE, com antecedência mínima de 5 (cinco) dias úteis, qualquer circunstância que possa comprometer a execução tempestiva dos Serviços;
+d) Responder, civil e criminalmente, por danos causados ao CONTRATANTE ou a terceiros em decorrência de culpa ou dolo na execução dos Serviços;
+e) Arcar com todos os tributos, encargos trabalhistas, previdenciários e sociais decorrentes de sua atividade, mantendo o CONTRATANTE indene de quaisquer reivindicações;
+f) Não subcontratar os Serviços, no todo ou em parte, sem autorização prévia e escrita do CONTRATANTE.
 
 Cláusula 5ª – Das Obrigações do CONTRATANTE
 
 Constituem obrigações do CONTRATANTE:
 
-a) Fornecer ao CONTRATADO todas as informações, materiais e recursos necessários à adequada execução dos Serviços;
+a) Fornecer ao CONTRATADO todas as informações, materiais, acessos e recursos necessários à adequada execução dos Serviços, em tempo hábil;
 b) Efetuar os pagamentos nos prazos e condições estipulados neste contrato;
 c) Comunicar ao CONTRATADO, com antecedência razoável, eventuais alterações no escopo dos Serviços;
-d) Garantir ao CONTRATADO acesso às instalações e sistemas necessários à execução dos Serviços.
+d) Garantir ao CONTRATADO acesso às instalações e sistemas necessários à execução dos Serviços;
+e) Designar um responsável interno para acompanhar e aprovar as entregas do CONTRATADO.
 
 Cláusula 6ª – Da Propriedade Intelectual
 
-Todos os trabalhos, criações, desenvolvimentos e resultados produzidos pelo CONTRATADO em decorrência deste contrato serão de exclusiva propriedade do CONTRATANTE, que poderá utilizá-los livremente, independentemente de qualquer pagamento adicional.
+Todos os trabalhos, criações, desenvolvimentos, documentos e demais resultados produzidos pelo CONTRATADO em decorrência deste contrato serão de exclusiva propriedade do CONTRATANTE, que poderá utilizá-los livremente, independentemente de qualquer pagamento adicional.
+
+Parágrafo único. O CONTRATADO cede, em caráter definitivo, universal e irrevogável, todos os direitos patrimoniais sobre os resultados produzidos, incluindo direitos de reprodução, modificação, publicação e cessão a terceiros, nos termos da Lei nº 9.610/1998.
 
 Cláusula 7ª – Da Confidencialidade
 
-As partes comprometem-se a manter em absoluto sigilo todas as informações técnicas, comerciais, financeiras ou de qualquer outra natureza a que tiverem acesso em virtude deste contrato, obrigação esta que subsistirá pelo prazo de 5 (cinco) anos após o encerramento deste instrumento.
+As partes comprometem-se a manter em absoluto sigilo todas as informações técnicas, comerciais, financeiras ou de qualquer outra natureza a que tiverem acesso em virtude deste contrato.
 
-Cláusula 8ª – Da Rescisão
+Parágrafo único. A obrigação de sigilo subsistirá pelo prazo de 5 (cinco) anos após o encerramento deste instrumento, sendo passível de tutela específica e indenização integral pelos danos causados em caso de descumprimento.
+
+Cláusula 8ª – Do Caso Fortuito e Força Maior
+
+Nenhuma das partes será responsabilizada por atrasos ou descumprimentos decorrentes de caso fortuito ou força maior, assim entendidos os eventos imprevisíveis e inevitáveis, nos termos do art. 393 do Código Civil Brasileiro.
+
+Parágrafo único. A parte que se encontrar em situação de caso fortuito ou força maior deverá notificar a outra por escrito, no prazo máximo de 48 (quarenta e oito) horas, descrevendo a natureza e a duração estimada do evento.
+
+Cláusula 9ª – Da Rescisão
 
 Este contrato poderá ser rescindido:
 
@@ -59,9 +75,18 @@ a) Por qualquer das partes, mediante notificação escrita com antecedência mí
 b) De imediato, por qualquer das partes, em caso de descumprimento de quaisquer das cláusulas deste instrumento, sem prejuízo das perdas e danos cabíveis;
 c) Por mútuo acordo, formalizado por escrito.
 
-Parágrafo único. Em caso de rescisão antecipada sem justa causa pelo CONTRATANTE, serão devidos ao CONTRATADO os valores proporcionais aos Serviços já executados até a data da rescisão.
+§ 1º Em caso de rescisão antecipada sem justa causa pelo CONTRATANTE, serão devidos ao CONTRATADO os valores proporcionais aos Serviços já executados até a data da rescisão, acrescidos de multa compensatória correspondente a 20% (vinte por cento) do valor remanescente do contrato.
 
-Cláusula 9ª – Do Foro
+§ 2º Em caso de rescisão antecipada sem justa causa pelo CONTRATADO, este deverá restituir ao CONTRATANTE os valores pagos e não prestados, acrescidos de multa equivalente a 10% (dez por cento) do valor remanescente do contrato.
+
+Cláusula 10ª – Das Disposições Gerais
+
+a) Este contrato é celebrado em caráter irrevogável e irretratável, obrigando as partes e seus sucessores a qualquer título;
+b) A tolerância de uma parte em relação ao descumprimento de obrigação pela outra não implicará novação, renúncia de direitos ou alteração contratual;
+c) Eventuais alterações deste contrato somente serão válidas se formalizadas por escrito e assinadas por representantes legais de ambas as partes;
+d) Este instrumento representa a totalidade dos acordos entre as partes sobre o objeto aqui descrito, prevalecendo sobre quaisquer entendimentos verbais ou escritos anteriores.
+
+Cláusula 11ª – Do Foro
 
 As partes elegem o foro da Comarca de {{foro_comarca}}, Estado de {{contratante_estado}}, como competente para dirimir quaisquer litígios ou controvérsias oriundos do presente contrato, com expressa renúncia a qualquer outro, por mais privilegiado que seja.
 

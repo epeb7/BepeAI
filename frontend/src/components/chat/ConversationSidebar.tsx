@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { ConversationSummary } from '../../services/history.service';
-import { Pencil, Trash2, Check, X, Loader2, MessageSquare, PenSquare, PanelLeft } from 'lucide-react';
+import { Pencil, Trash2, Check, X, Loader2, MessageSquare, PenSquare, PanelLeft, Search } from 'lucide-react';
 
 interface Props {
   open: boolean;
@@ -17,16 +17,16 @@ interface Props {
 // ── Helpers ───────────────────────────────────────────────────
 
 function relDate(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(diff / 60_000);
-  const h = Math.floor(m / 60);
-  const d = Math.floor(h / 24);
-  if (m < 1) return 'agora';
-  if (m < 60) return `${m}min`;
-  if (h < 24) return `${h}h`;
-  if (d === 1) return 'ontem';
-  if (d < 7) return `${d}d`;
-  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+  const date = new Date(iso);
+  const todayStart = new Date().setHours(0, 0, 0, 0);
+  const yesterdayStart = todayStart - 86_400_000;
+  const t = date.getTime();
+
+  const hhmm = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+  if (t >= todayStart)     return hhmm;
+  if (t >= yesterdayStart) return hhmm;
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
 }
 
 function groupByDate(list: ConversationSummary[]): [string, ConversationSummary[]][] {
@@ -51,12 +51,33 @@ function groupByDate(list: ConversationSummary[]): [string, ConversationSummary[
 interface ItemProps {
   conv: ConversationSummary;
   isActive: boolean;
+  searchQuery: string;
   onSelect: () => void;
   onRename: (t: string) => Promise<void>;
   onDelete: () => Promise<void>;
 }
 
-function Item({ conv, isActive, onSelect, onRename, onDelete }: ItemProps) {
+function highlightMatch(text: string, query: string): React.ReactNode {
+  if (!query.trim()) return text;
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return text;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark style={{
+        background: 'hsl(250 85% 60% / 0.25)',
+        color: 'hsl(250 85% 78%)',
+        borderRadius: '2px',
+        padding: '0 1px',
+      }}>
+        {text.slice(idx, idx + query.length)}
+      </mark>
+      {text.slice(idx + query.length)}
+    </>
+  );
+}
+
+function Item({ conv, isActive, searchQuery, onSelect, onRename, onDelete }: ItemProps) {
   const [editing,  setEditing]  = useState(false);
   const [draft,    setDraft]    = useState('');
   const [saving,   setSaving]   = useState(false);
@@ -87,20 +108,32 @@ function Item({ conv, isActive, onSelect, onRename, onDelete }: ItemProps) {
     try { await onDelete(); } finally { setDeleting(false); }
   };
 
+  const title = conv.title ?? 'Conversa sem título';
+
   return (
     <div
       onClick={onSelect}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        padding: '9px 10px', borderRadius: '10px', cursor: 'pointer',
+        padding: '8px 10px', borderRadius: '10px', cursor: 'pointer',
         background: isActive
-          ? 'hsl(250 40% 20% / 0.55)'
+          ? 'hsl(250 40% 20% / 0.6)'
           : hovered ? 'hsl(220 14% 17%)' : 'transparent',
-        border: `1px solid ${isActive ? 'hsl(250 50% 36% / 0.45)' : 'transparent'}`,
+        border: `1px solid ${isActive ? 'hsl(250 50% 36% / 0.5)' : 'transparent'}`,
         transition: 'background 0.12s, border-color 0.12s',
+        position: 'relative',
       }}
     >
+      {/* Active left bar */}
+      {isActive && (
+        <div style={{
+          position: 'absolute', left: 0, top: '20%', bottom: '20%',
+          width: '2px', borderRadius: '0 2px 2px 0',
+          background: 'hsl(250 85% 62%)',
+        }} />
+      )}
+
       {editing ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
              onClick={e => e.stopPropagation()}>
@@ -136,7 +169,7 @@ function Item({ conv, isActive, onSelect, onRename, onDelete }: ItemProps) {
               display: '-webkit-box', WebkitLineClamp: 2,
               WebkitBoxOrient: 'vertical', overflow: 'hidden',
             }}>
-              {conv.title ?? 'Conversa sem título'}
+              {highlightMatch(title, searchQuery)}
             </span>
             <div style={{
               display: 'flex', gap: '2px',
@@ -160,8 +193,7 @@ function Item({ conv, isActive, onSelect, onRename, onDelete }: ItemProps) {
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '5px' }}>
-            {/* Status dot */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '4px' }}>
             <span style={{
               width: '5px', height: '5px', borderRadius: '50%', flexShrink: 0,
               background: conv.status === 'completed'
@@ -178,17 +210,13 @@ function Item({ conv, isActive, onSelect, onRename, onDelete }: ItemProps) {
                 background: isActive ? 'hsl(250 40% 22%)' : 'hsl(220 14% 18%)',
                 border: `1px solid ${isActive ? 'hsl(250 40% 32%)' : 'hsl(220 12% 24%)'}`,
                 color: isActive ? 'hsl(250 50% 66%)' : 'hsl(215 8% 42%)',
+                maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}>
                 {conv.workflowType.replace(/_/g, ' ')}
               </span>
             )}
 
-            <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'hsl(215 8% 30%)' }}>
-              {conv.turnCount > 0 && (
-                <span style={{ marginRight: '5px', color: 'hsl(215 8% 34%)' }}>
-                  {conv.turnCount}t
-                </span>
-              )}
+            <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'hsl(215 8% 30%)', whiteSpace: 'nowrap' }}>
               {relDate(conv.updatedAt)}
             </span>
           </div>
@@ -234,13 +262,29 @@ export function ConversationSidebar({
   open, conversations, activeId, isLoading,
   onToggle, onSelect, onRename, onDelete, onNewConversation,
 }: Props) {
-  const groups = groupByDate(conversations);
+  const [search, setSearch] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  const filtered = search.trim()
+    ? conversations.filter(c =>
+        (c.title ?? 'Conversa sem título').toLowerCase().includes(search.toLowerCase())
+      )
+    : conversations;
+
+  const groups = groupByDate(filtered);
+
+  useEffect(() => {
+    if (!open) setSearch('');
+  }, [open]);
 
   return (
     <>
-      {/* CSS da animação de width */}
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes sidebarItemIn {
+          from { opacity: 0; transform: translateX(-4px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
 
         .bepe-sidebar {
           width: 240px;
@@ -253,7 +297,6 @@ export function ConversationSidebar({
           width: 0;
           opacity: 0;
         }
-        /* Conteúdo interno não encolhe — o overflow:hidden faz o clip */
         .bepe-sidebar-inner {
           width: 240px;
           height: 100%;
@@ -261,6 +304,19 @@ export function ConversationSidebar({
           flex-direction: column;
           flex-shrink: 0;
         }
+        .bepe-search-input::placeholder { color: hsl(215 8% 36%); }
+        .bepe-search-input:focus { outline: none; }
+        .bepe-new-conv-btn:hover {
+          background: hsl(250 40% 20%) !important;
+          border-color: hsl(250 50% 36%) !important;
+          color: hsl(250 60% 72%) !important;
+        }
+        .bepe-sidebar-list {
+          scrollbar-width: thin;
+          scrollbar-color: hsl(220 12% 22%) transparent;
+        }
+        .bepe-sidebar-list::-webkit-scrollbar { width: 3px; }
+        .bepe-sidebar-list::-webkit-scrollbar-thumb { background: hsl(220 12% 22%); border-radius: 99px; }
       `}</style>
 
       <aside
@@ -283,15 +339,14 @@ export function ConversationSidebar({
             alignItems: 'center',
             gap: '6px',
           }}>
-            {/* Toggle — abre/fecha a sidebar */}
             <SidebarBtn onClick={onToggle} title="Fechar painel" style={{ flexShrink: 0 }}>
               <PanelLeft size={14} />
             </SidebarBtn>
 
-            {/* Nova conversa — ocupa o espaço restante */}
             <button
               onClick={onNewConversation}
               title="Nova conversa"
+              className="bepe-new-conv-btn"
               style={{
                 flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
                 gap: '6px', height: '30px', borderRadius: '8px', cursor: 'pointer',
@@ -301,26 +356,52 @@ export function ConversationSidebar({
                 fontSize: '12px', fontWeight: 500,
                 transition: 'all 0.15s', whiteSpace: 'nowrap', overflow: 'hidden',
               }}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = 'hsl(250 40% 20%)';
-                e.currentTarget.style.borderColor = 'hsl(250 50% 36%)';
-                e.currentTarget.style.color = 'hsl(250 60% 72%)';
-                e.currentTarget.style.boxShadow = '0 0 0 1px hsl(250 85% 60% / 0.10)';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = 'hsl(220 14% 16%)';
-                e.currentTarget.style.borderColor = 'hsl(220 12% 22%)';
-                e.currentTarget.style.color = 'hsl(215 12% 58%)';
-                e.currentTarget.style.boxShadow = 'none';
-              }}
             >
               <PenSquare size={12} />
               Nova conversa
             </button>
           </div>
 
+          {/* ── Search ────────────────────────────────────────── */}
+          <div style={{ padding: '8px 10px 6px', flexShrink: 0 }}>
+            <div
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '5px 10px', borderRadius: '8px',
+                background: 'hsl(220 16% 14%)',
+                border: `1px solid ${search ? 'hsl(250 50% 34%)' : 'hsl(220 12% 20%)'}`,
+                transition: 'border-color 0.15s', cursor: 'text',
+              }}
+              onClick={() => searchRef.current?.focus()}
+            >
+              <Search size={11} color="hsl(215 8% 36%)" style={{ flexShrink: 0 }} />
+              <input
+                ref={searchRef}
+                className="bepe-search-input"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Buscar conversas..."
+                style={{
+                  flex: 1, fontSize: '11px', background: 'transparent',
+                  border: 'none', color: 'hsl(215 12% 70%)', padding: 0,
+                }}
+              />
+              {search && (
+                <button
+                  onClick={e => { e.stopPropagation(); setSearch(''); }}
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', padding: 0,
+                  }}
+                >
+                  <X size={11} color="hsl(215 8% 40%)" />
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* ── List ──────────────────────────────────────────── */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
+          <div className="bepe-sidebar-list" style={{ flex: 1, overflowY: 'auto', padding: '4px 8px 8px' }}>
             {isLoading && (
               <div style={{ display: 'flex', justifyContent: 'center', padding: '32px 0' }}>
                 <Loader2 size={16} style={{
@@ -331,7 +412,7 @@ export function ConversationSidebar({
             )}
 
             {!isLoading && conversations.length === 0 && (
-              <div style={{ textAlign: 'center', padding: '40px 16px' }}>
+              <div style={{ textAlign: 'center', padding: '36px 16px' }}>
                 <div style={{
                   width: '36px', height: '36px', borderRadius: '10px', margin: '0 auto 10px',
                   background: 'hsl(220 16% 16%)', border: '1px solid hsl(220 14% 22%)',
@@ -339,18 +420,27 @@ export function ConversationSidebar({
                 }}>
                   <MessageSquare size={16} color="hsl(215 8% 34%)" />
                 </div>
-                <p style={{ fontSize: '11px', color: 'hsl(215 8% 36%)', lineHeight: 1.6 }}>
+                <p style={{ fontSize: '11px', color: 'hsl(215 8% 36%)', lineHeight: 1.6, margin: 0 }}>
                   Suas conversas salvas<br />aparecerão aqui.
                 </p>
               </div>
             )}
 
+            {!isLoading && conversations.length > 0 && filtered.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '28px 16px' }}>
+                <p style={{ fontSize: '11px', color: 'hsl(215 8% 36%)', lineHeight: 1.6, margin: 0 }}>
+                  Nenhuma conversa encontrada<br />
+                  para "<strong style={{ color: 'hsl(215 8% 50%)' }}>{search}</strong>"
+                </p>
+              </div>
+            )}
+
             {!isLoading && groups.map(([label, items]) => (
-              <div key={label} style={{ marginBottom: '16px' }}>
+              <div key={label} style={{ marginBottom: '14px' }}>
                 <p style={{
                   fontSize: '10px', fontWeight: 600, textTransform: 'uppercase',
-                  letterSpacing: '0.1em', color: 'hsl(215 8% 30%)',
-                  padding: '0 10px', marginBottom: '4px',
+                  letterSpacing: '0.1em', color: 'hsl(215 8% 28%)',
+                  padding: '0 10px', marginBottom: '3px', marginTop: 0,
                 }}>
                   {label}
                 </p>
@@ -358,6 +448,7 @@ export function ConversationSidebar({
                   {items.map(c => (
                     <Item
                       key={c.id} conv={c} isActive={c.id === activeId}
+                      searchQuery={search}
                       onSelect={() => onSelect(c.id)}
                       onRename={t => onRename(c.id, t)}
                       onDelete={() => onDelete(c.id)}

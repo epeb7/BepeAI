@@ -22,8 +22,21 @@ const groq = new Groq({ apiKey: env.GROQ_API_KEY });
 // Modelos por responsabilidade:
 // 70B → extração multi-campo (maior precisão, menos alucinação)
 // 8B  → campo único e tarefas simples (baixa latência)
-const MODEL_EXTRACTION = 'llama-3.3-70b-versatile';
-const MODEL_INTENT     = 'llama-3.1-8b-instant';
+const MODEL_EXTRACTION     = 'llama-3.3-70b-versatile';
+const MODEL_INTENT         = 'llama-3.1-8b-instant';
+const MODEL_CONVERSATIONAL = 'llama-3.1-8b-instant'; // rápido, só gera texto natural
+
+const GROQ_TIMEOUT_MS = 25_000;
+
+// ── Timeout wrapper ───────────────────────────────────────────
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`[Groq] Timeout (${ms}ms): ${label}`)), ms)
+    ),
+  ]);
+}
 
 // ── Retry com backoff exponencial ────────────────────────────
 async function withRetry<T>(
@@ -33,8 +46,10 @@ async function withRetry<T>(
 ): Promise<T> {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      return await fn();
+      return await withTimeout(fn(), GROQ_TIMEOUT_MS, label);
     } catch (err: unknown) {
+      const msg = (err as Error)?.message ?? '';
+      if (msg.includes('Timeout')) throw err; // não retenta timeout
       const status = (err as { status?: number })?.status;
       const retryable = status === 429 || status === 503 || status === 502;
       if (!retryable || attempt === maxAttempts) throw err;
@@ -70,184 +85,294 @@ function isExtracaoFalha(valor: string): boolean {
 // Extração determinística por regex (layer 1 — sem IA)
 // ============================================================
 
-function extrairCampoManual(texto: string, campo: string): string | null {
-  switch (campo) {
-    // ── Empresa (só extrai se o input É a razão social, i.e. texto curto sem outros dados) ──
-    case 'empresa':
-    case 'contratante_empresa':
-    case 'contratado_empresa': {
-      // Procura por "Razão social: X" ou "Empresa: X"
-      const labelMatch = texto.match(/(?:raz[aã]o\s+social|empresa)\s*:\s*([^,\n]+)/i);
-      if (labelMatch) return labelMatch[1].trim();
-      // Texto simples sem números/vírgulas: trata como nome direto
-      if (/^[A-Za-zÀ-ÿ\s.&'"]+$/.test(texto.trim()) && texto.trim().length >= 2) return texto.trim();
-      return null;
-    }
+// ── Helpers internos do extrator ─────────────────────────────
 
-    // ── Documentos numéricos — extração determinística confiável ──
-    case 'cnpj':
-    case 'contratante_cnpj':
-    case 'contratado_cnpj': {
-      const m = texto.replace(/\D/g, '').match(/\d{14}/);
-      return m ? m[0] : null;
-    }
-
-    case 'cpf':
-    case 'contratante_cpf':
-    case 'contratado_cpf': {
-      // Prefere match após label "CPF:" para evitar capturar dígitos do RG
-      const labeled = texto.match(/\bcpf\s*:?\s*([\d.\-\/]+)/i);
-      if (labeled) return labeled[1].replace(/\D/g, '').slice(0, 11);
-      // Fallback: procura sequência de 11 dígitos isolada
-      const m = texto.match(/(?<!\d)(\d{11})(?!\d)/);
-      return m ? m[1] : null;
-    }
-
-    case 'contratante_rg':
-    case 'contratado_rg': {
-      // Prefere match após "RG" ou "rg:"
-      const labeled = texto.match(/\brg\s*:?\s*(\d[\d.\-]{6,10})/i);
-      if (labeled) return labeled[1].replace(/\D/g, '');
-      const m = texto.replace(/\D/g, '').match(/\d{7,9}/);
-      return m ? m[0] : null;
-    }
-
-    // ── Datas ──
-    case 'data_inicio': {
-      // Em textos multi-campo, pega a PRIMEIRA data
-      const m = texto.match(/(?:in[íi]cio\s*:?\s*)?(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/i);
-      if (m) {
-        let [, dia, mes, ano] = m;
-        if (ano.length === 2) ano = '20' + ano;
-        return `${dia.padStart(2, '0')}/${mes.padStart(2, '0')}/${ano}`;
-      }
-      return null;
-    }
-
-    case 'data_fim': {
-      // Em textos multi-campo, pega a SEGUNDA data (ignora a primeira)
-      const allDates = [...texto.matchAll(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/g)];
-      if (allDates.length >= 2) {
-        let [, dia, mes, ano] = allDates[1];
-        if (ano.length === 2) ano = '20' + ano;
-        return `${dia.padStart(2, '0')}/${mes.padStart(2, '0')}/${ano}`;
-      }
-      return null;
-    }
-
-    case 'data_assinatura':
-    case 'dataInicio':
-    case 'dataFim': {
-      const m = texto.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
-      if (m) {
-        let [, dia, mes, ano] = m;
-        if (ano.length === 2) ano = '20' + ano;
-        return `${dia.padStart(2, '0')}/${mes.padStart(2, '0')}/${ano}`;
-      }
-      return null;
-    }
-
-    // ── Valores monetários ──
-    case 'valor_total':
-    case 'valor': {
-      // Prefere match após "R$", "valor:" ou "total:"
-      const labeled = texto.match(/(?:r\$|valor\s*:?|total\s*:?)\s*([\d.,]+)/i);
-      if (labeled) return labeled[1].replace(',', '.');
-      const m = texto.replace(/R\$\s?/g, '').match(/\b([\d]{2,}(?:[.,]\d+)?)\b/);
-      if (m) return m[1].replace(',', '.');
-      return null;
-    }
-
-    // ── Prazos em dias ──
-    case 'aviso_previo':
-    case 'prazo': {
-      const m = texto.match(/(\d+)\s*(dia|dias|mês|mes|meses|semana|semanas)/i);
-      return m ? m[1] : null;
-    }
-
-    // ── Estado/UF ──
-    case 'contratante_estado':
-    case 'contratado_estado': {
-      // Prefere match após "estado:" ou ", [UF]" no final
-      const labeled = texto.match(/estado\s*:?\s*([A-Z]{2})\b/i);
-      if (labeled) return labeled[1].toUpperCase();
-      const m = texto.match(/\b([A-Z]{2})\b/);
-      return m ? m[1] : null;
-    }
-
-    // ── Dia de pagamento ──
-    case 'dia_pagamento': {
-      const m = texto.match(/\bdia\s+(\d{1,2})\b/i) || texto.match(/vencimento\s*:?\s*(\d{1,2})/i);
-      return m ? m[1] : null;
-    }
-
-    // ── Foro e cidade de assinatura ──
-    case 'foro_comarca': {
-      const m = texto.match(/foro\s*:?\s*([A-Za-zÀ-ÿ\s]+?)(?:,|$|\n|assinatura)/i)
-               || texto.match(/comarca\s+(?:de\s+)?([A-Za-zÀ-ÿ\s]+?)(?:,|$|\n)/i);
-      return m ? m[1].trim() : null;
-    }
-
-    case 'cidade_assinatura': {
-      const m = texto.match(/(?:assinatura\s+em|cidade\s+(?:de\s+)?assinatura\s*:)\s*([A-Za-zÀ-ÿ\s]+?)(?:,|$|\n|em\s+\d)/i)
-               || texto.match(/assinatura\s*:?\s*([A-Za-zÀ-ÿ\s]+?)(?:,|$|\n)/i);
-      return m ? m[1].trim() : null;
-    }
-
-    // ── Endereço ──
-    case 'contratante_endereco':
-    case 'contratado_endereco': {
-      const labeled = texto.match(/endere[çc]o\s*:?\s*([^,\n]{5,}?)(?:,\s*[A-Za-zÀ-ÿ]+\s*,\s*[A-Z]{2}|$|\n)/i);
-      if (labeled) return labeled[1].trim();
-      return null;
-    }
-
-    // ── Cidade ──
-    case 'contratante_cidade':
-    case 'contratado_cidade': {
-      const labeled = texto.match(/cidade\s*:?\s*([A-Za-zÀ-ÿ\s]+?)(?:,|\n|$)/i);
-      if (labeled) return labeled[1].trim();
-      return null;
-    }
-
-    // ── Cargo do representante ──
-    case 'contratante_cargo':
-    case 'contratado_cargo': {
-      const labeled = texto.match(/cargo\s*:?\s*([A-Za-zÀ-ÿ\s]+?)(?:,|\n|$)/i);
-      if (labeled) return labeled[1].trim();
-      return null; // deixa para o LLM
-    }
-
-    // ── Nome do representante ──
-    case 'contratante_nome':
-    case 'contratado_nome': {
-      const labeled = texto.match(/nome\s*:?\s*([A-Za-zÀ-ÿ\s]+?)(?:,|\n|$)/i);
-      if (labeled) return labeled[1].trim();
-      return null; // deixa para o LLM
-    }
-
-    // ── Forma de pagamento ──
-    case 'forma_pagamento': {
-      const labeled = texto.match(/pagamento\s*:?\s*([A-Za-zÀ-ÿ\s]+?)(?:,|\n|$)/i);
-      if (labeled) return labeled[1].trim();
-      return null;
-    }
-
-    // ── Objeto dos serviços ──
-    case 'objeto_servicos': {
-      const labeled = texto.match(/objeto\s*:?\s*([^,\n]{3,}?)(?:\n|$)/i);
-      if (labeled) return labeled[1].trim();
-      // Texto curto sem outros dados → provavelmente é o objeto
-      if (texto.length < 100 && !texto.match(/\d{2}\/\d{2}\/\d{4}/) && !texto.match(/cnpj|cpf/i)) {
-        return texto.trim();
-      }
-      return null;
-    }
-
-    // ── Todos os outros campos: deixa o LLM decidir ──
-    default:
-      return null;
+function extrairEmpresa(texto: string, labels: string[]): string | null {
+  // Tenta labels explícitos fornecidos
+  for (const lbl of labels) {
+    const m = texto.match(new RegExp(`${lbl}\\s*:?\\s*([^,\\n]{2,80})`, 'i'));
+    if (m) return m[1].trim();
   }
+  // Fallback: texto simples sem dígitos relevantes → nome da empresa
+  if (/^[A-Za-zÀ-ÿ\s.&'"()-]+$/.test(texto.trim()) && texto.trim().length >= 2) return texto.trim();
+  return null;
+}
+
+function extrairCNPJ(texto: string, preferLabel?: string): string | null {
+  if (preferLabel) {
+    const m = texto.match(new RegExp(`${preferLabel}\\s*:?\\s*([\\d.\\-/]{14,18})`, 'i'));
+    if (m) { const d = m[1].replace(/\D/g, ''); if (d.length === 14) return d; }
+  }
+  const m = texto.replace(/\D/g, '').match(/\d{14}/);
+  return m ? m[0] : null;
+}
+
+function extrairCPF(texto: string, preferLabel?: string): string | null {
+  if (preferLabel) {
+    const m = texto.match(new RegExp(`${preferLabel}\\s*:?\\s*([\\d.\\-]{11,14})`, 'i'));
+    if (m) { const d = m[1].replace(/\D/g, '').slice(0, 11); if (d.length === 11) return d; }
+  }
+  const labeled = texto.match(/\bcpf\s*:?\s*([\d.\-]+)/i);
+  if (labeled) { const d = labeled[1].replace(/\D/g, '').slice(0, 11); if (d.length === 11) return d; }
+  const m = texto.match(/(?<!\d)(\d{11})(?!\d)/);
+  return m ? m[1] : null;
+}
+
+function extrairData(texto: string, labelRegex?: RegExp): string | null {
+  const src = labelRegex
+    ? (() => { const m = texto.match(labelRegex); return m ? texto.slice(m.index!) : texto; })()
+    : texto;
+  const m = src.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  if (!m) return null;
+  let [, dia, mes, ano] = m;
+  if (ano.length === 2) ano = '20' + ano;
+  return `${dia.padStart(2, '0')}/${mes.padStart(2, '0')}/${ano}`;
+}
+
+function extrairValorMonetario(texto: string, labelRegex?: RegExp): string | null {
+  const src = labelRegex
+    ? (() => { const m = texto.match(labelRegex); return m ? texto.slice(m.index!) : texto; })()
+    : texto;
+  const labeled = src.match(/(?:r\$|valor(?:\s+(?:total|unit[aá]rio|unitario))?\s*:?|total\s*:?|penalidade\s*:?|multa\s*:?)\s*([\d.,]+)/i);
+  if (labeled) return labeled[1].replace(/\./g, '').replace(',', '.');
+  const m = src.replace(/R\$\s?/g, '').match(/\b(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?|\d{2,})\b/);
+  if (m) return m[1].replace(/\./g, '').replace(',', '.');
+  return null;
+}
+
+function extrairTextoLivre(texto: string, labels: string[]): string | null {
+  for (const lbl of labels) {
+    const m = texto.match(new RegExp(`${lbl}\\s*:?\\s*([^\\n]{2,200})`, 'i'));
+    if (m) return m[1].trim();
+  }
+  return null;
+}
+
+function extrairNumeroSimples(texto: string, labels: string[]): string | null {
+  for (const lbl of labels) {
+    const m = texto.match(new RegExp(`${lbl}\\s*:?\\s*(\\d+)`, 'i'));
+    if (m) return m[1];
+  }
+  const m = texto.match(/\b(\d+)\b/);
+  return m ? m[1] : null;
+}
+
+function extrairEndereco(texto: string): string | null {
+  const labeled = texto.match(/endere[çc]o\s*:?\s*([^\n]{5,120})/i);
+  if (labeled) return labeled[1].trim();
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────────
+function extrairCampoManual(texto: string, campo: string): string | null {
+  // ── Empresas / razões sociais ─────────────────────────────────
+  // Todos os campos que representam nome de empresa: aceita labels variados
+  if (campo.endsWith('_empresa') || campo === 'empresa' || campo === 'empresa_emitente' || campo === 'emitente_empresa') {
+    return extrairEmpresa(texto, ['raz[aã]o\\s+social', 'empresa(?:\\s+emitente)?', 'emitente']);
+  }
+  if (campo === 'cliente_empresa' || campo === 'cliente_nome') {
+    return extrairTextoLivre(texto, ['cliente', 'destinat[aá]rio', 'solicitante', 'raz[aã]o\\s+social']);
+  }
+  if (campo === 'divulgadora_empresa') {
+    return extrairEmpresa(texto, ['raz[aã]o\\s+social', 'divulgadora', 'empresa']);
+  }
+  if (campo === 'receptora_empresa') {
+    return extrairEmpresa(texto, ['raz[aã]o\\s+social', 'receptora', 'empresa']);
+  }
+
+  // ── CNPJ — 14 dígitos ──────────────────────────────────────
+  if (campo.includes('cnpj') || campo === 'cliente_cnpj_cpf') {
+    // cliente_cnpj_cpf pode ser CNPJ ou CPF — tenta os dois
+    if (campo === 'cliente_cnpj_cpf') {
+      const cnpj = extrairCNPJ(texto, 'cnpj');
+      if (cnpj) return cnpj;
+      return extrairCPF(texto, 'cpf');
+    }
+    return extrairCNPJ(texto, 'cnpj');
+  }
+
+  // ── CPF — 11 dígitos ───────────────────────────────────────
+  if (campo.includes('cpf') && !campo.includes('cnpj')) {
+    return extrairCPF(texto, 'cpf');
+  }
+
+  // ── RG ─────────────────────────────────────────────────────
+  if (campo.includes('_rg')) {
+    const labeled = texto.match(/\brg\s*:?\s*(\d[\d.\-]{6,10})/i);
+    if (labeled) return labeled[1].replace(/\D/g, '');
+    return null;
+  }
+
+  // ── Datas ──────────────────────────────────────────────────
+  if (campo === 'data_inicio') {
+    return extrairData(texto, /in[íi]cio\s*:?\s*/i) ?? extrairData(texto);
+  }
+  if (campo === 'data_fim') {
+    // Segunda data no texto
+    const allDates = [...texto.matchAll(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/g)];
+    if (allDates.length >= 2) {
+      let [, dia, mes, ano] = allDates[1];
+      if (ano.length === 2) ano = '20' + ano;
+      return `${dia.padStart(2, '0')}/${mes.padStart(2, '0')}/${ano}`;
+    }
+    return null;
+  }
+  if (campo === 'data_assinatura' || campo === 'data_emissao' || campo === 'dataInicio' || campo === 'dataFim') {
+    return extrairData(texto);
+  }
+
+  // ── Valores monetários ─────────────────────────────────────
+  if (campo === 'valor_total' || campo === 'valor') {
+    return extrairValorMonetario(texto, /(?:valor\s*(?:total)?\s*:?|total\s*:?)/i);
+  }
+  if (campo === 'valor_unitario') {
+    return extrairValorMonetario(texto, /valor\s*unit[aá]rio\s*:?/i);
+  }
+  if (campo === 'penalidade_valor') {
+    return extrairValorMonetario(texto, /(?:multa|penalidade)\s*:?/i);
+  }
+
+  // ── Endereços ──────────────────────────────────────────────
+  if (campo.includes('endereco') || campo.includes('_endereco')) {
+    return extrairEndereco(texto);
+  }
+
+  // ── Cidades ────────────────────────────────────────────────
+  if (campo.includes('cidade') && !campo.includes('assinatura') && !campo.includes('emissao')) {
+    return extrairTextoLivre(texto, ['cidade']);
+  }
+  if (campo === 'cidade_assinatura') {
+    return extrairTextoLivre(texto, ['cidade\\s*(?:de\\s*)?assinatura', 'assinatura']) ?? extrairTextoLivre(texto, ['cidade']);
+  }
+  if (campo === 'cidade_emissao') {
+    return extrairTextoLivre(texto, ['cidade\\s*(?:de\\s*)?emiss[aã]o', 'emiss[aã]o']) ?? extrairTextoLivre(texto, ['cidade']);
+  }
+
+  // ── Estado/UF ──────────────────────────────────────────────
+  if (campo.includes('estado') && !campo.includes('civil')) {
+    const UFS = new Set(['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS',
+                         'MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC',
+                         'SP','SE','TO']);
+    const labeled = texto.match(/(?:estado|uf)\s*[\(:]\s*([A-Za-z]{2})\b/i);
+    if (labeled) { const uf = labeled[1].toUpperCase(); if (UFS.has(uf)) return uf; }
+    const all = [...texto.matchAll(/\b([A-Za-z]{2})\b/g)];
+    for (const m of all) { const uf = m[1].toUpperCase(); if (UFS.has(uf)) return uf; }
+    return null;
+  }
+
+  // ── Cargos (representantes legais) ────────────────────────
+  if (campo.includes('cargo')) {
+    return extrairTextoLivre(texto, ['cargo']);
+  }
+
+  // ── Nomes de representantes / responsáveis ─────────────────
+  if (campo.endsWith('_nome') || campo.endsWith('_representante') || campo === 'responsavel' || campo === 'emitente_responsavel' || campo === 'responsavel_emitente' || campo === 'cliente_responsavel') {
+    return extrairTextoLivre(texto, ['nome(?!\\s*(?:completo|da empresa|razão))?', 'representante', 'respons[aá]vel']);
+  }
+
+  // ── Objeto / Descrição de serviços ─────────────────────────
+  if (campo === 'objeto_servicos') {
+    return extrairTextoLivre(texto, ['objeto', 'servi[çc]o']) ?? (
+      texto.length < 100 && !texto.match(/\d{2}\/\d{2}\/\d{4}/) && !texto.match(/cnpj|cpf/i)
+        ? texto.trim() : null
+    );
+  }
+  if (campo === 'descricao_servicos') {
+    return extrairTextoLivre(texto, ['descri[çc][aã]o', 'servi[çc]os?', 'objeto']);
+  }
+  if (campo === 'escopo_detalhado') {
+    return extrairTextoLivre(texto, ['escopo', 'entregas?', 'inclui']);
+  }
+  if (campo === 'descricao_itens') {
+    return extrairTextoLivre(texto, ['descri[çc][aã]o', 'itens?', 'produtos?', 'servi[çc]os?']);
+  }
+
+  // ── Prazos numéricos ───────────────────────────────────────
+  if (campo === 'aviso_previo' || campo === 'vigencia_meses') {
+    return extrairNumeroSimples(texto, ['aviso\\s*pr[eé]vio', 'vig[eê]ncia']);
+  }
+  if (campo === 'prazo_confidencialidade') {
+    return extrairNumeroSimples(texto, ['prazo\\s*(?:de\\s*)?sigilo', 'confidencialidade', 'prazo']);
+  }
+  if (campo === 'validade_proposta' || campo === 'validade_orcamento') {
+    return extrairNumeroSimples(texto, ['validade']);
+  }
+  if (campo === 'prazo_entrega' || campo === 'prazo_execucao') {
+    return extrairTextoLivre(texto, ['prazo\\s*(?:de\\s*)?(?:entrega|execu[çc][aã]o)', 'prazo']);
+  }
+
+  // ── Pagamento / Forma ──────────────────────────────────────
+  if (campo === 'forma_pagamento') {
+    return extrairTextoLivre(texto, ['pagamento', 'forma\\s*(?:de\\s*)?pagamento']);
+  }
+  if (campo === 'dia_pagamento') {
+    const m = texto.match(/\bdia\s+(\d{1,2})\b/i) || texto.match(/vencimento\s*:?\s*(\d{1,2})/i);
+    return m ? m[1] : null;
+  }
+
+  // ── Quantidade / Unidade ───────────────────────────────────
+  if (campo === 'quantidade_unidade') {
+    return extrairTextoLivre(texto, ['quantidade', 'qtd', 'unidade']);
+  }
+
+  // ── Foro ──────────────────────────────────────────────────
+  if (campo === 'foro_comarca') {
+    return extrairTextoLivre(texto, ['foro', 'comarca']);
+  }
+
+  // ── Contato: e-mail ────────────────────────────────────────
+  if (campo.includes('email') || campo.includes('e_mail')) {
+    const m = texto.match(/[\w.+-]+@[\w-]+\.[a-z]{2,}/i);
+    return m ? m[0] : null;
+  }
+
+  // ── Contato: telefone ──────────────────────────────────────
+  if (campo.includes('telefone')) {
+    const m = texto.match(/(?:\+55\s?)?(?:\(?\d{2}\)?\s?)[\d\s\-]{8,11}/);
+    return m ? m[0].trim() : null;
+  }
+
+  // ── Nacionalidade ──────────────────────────────────────────
+  if (campo.includes('nacionalidade')) {
+    return extrairTextoLivre(texto, ['nacionalidade']);
+  }
+
+  // ── Estado civil ──────────────────────────────────────────
+  if (campo.includes('estado_civil')) {
+    return extrairTextoLivre(texto, ['estado\\s+civil']);
+  }
+
+  // ── Profissão ─────────────────────────────────────────────
+  if (campo.includes('profissao')) {
+    return extrairTextoLivre(texto, ['profiss[aã]o']);
+  }
+
+  // ── Finalidade (NDA) ──────────────────────────────────────
+  if (campo === 'finalidade_nda') {
+    return extrairTextoLivre(texto, ['finalidade', 'objetivo', 'prop[oó]sito']);
+  }
+
+  // ── Informações confidenciais (NDA) ───────────────────────
+  if (campo === 'descricao_informacoes') {
+    return extrairTextoLivre(texto, ['informa[çc][oõ]es?', 'confidencial', 'tipo(?:\\s+de)?\\s+informa']);
+  }
+
+  // ── Campos de texto longo (título, resumo, resultados, recomendações) ──
+  if (campo === 'titulo_relatorio') {
+    return extrairTextoLivre(texto, ['t[íi]tulo', 'nome\\s+(?:do\\s+)?relat[oó]rio']);
+  }
+  if (campo === 'resumo_executivo') {
+    return extrairTextoLivre(texto, ['resumo\\s*(?:executivo)?']);
+  }
+  if (campo === 'principais_resultados') {
+    return extrairTextoLivre(texto, ['resultados?', 'principais?\\s+resultados?']);
+  }
+  if (campo === 'recomendacoes') {
+    return extrairTextoLivre(texto, ['recomenda[çc][oõ]es?']);
+  }
+
+  // ── Todos os outros: deixa o LLM decidir ──────────────────
+  return null;
 }
 
 // ============================================================
@@ -265,22 +390,46 @@ Sua ÚNICA função: extrair campos INDIVIDUAIS de uma mensagem, retornando JSON
 3. Se não encontrar o valor, retorne "".
 4. NUNCA repita dados de outros campos no mesmo campo.
 
-## EXTRAÇÃO DE CAMPOS DE TEXTO (cargo, nome, nationalidade, etc.)
-- Procure por labels explícitos: "Cargo: X", "Nome: X", "Profissão: X"
-- Se a mensagem for uma lista separada por vírgulas, cada item mapeia para um campo na ordem da lista de campos.
-- Exemplo: "Diretor, João Silva, Brasileiro, Casado, Empresário, RG 123456789, CPF 12345678901"
-  extraído: cargo="Diretor", nome="João Silva", nacionalidade="Brasileiro", estado_civil="Casado", profissao="Empresário"
-- NUNCA coloque a frase completa em um campo de texto. Apenas o valor isolado.
+## EXTRAÇÃO DE CAMPOS IDENTIFICADOS POR LABEL
+Procure labels explícitos no formato "Label: Valor" ou "Label — Valor".
+Labels aceitos (exemplos — não exaustivos):
+- Empresa, Razão social, Emitente, Divulgadora, Receptora → campo de empresa
+- CNPJ → 14 dígitos sem formatação
+- CPF, CPF do representante → 11 dígitos sem formatação
+- Representante, Nome, Responsável → nome da pessoa física
+- Cargo, Função → cargo do representante
+- Endereço → endereço completo incluindo número
+- E-mail, Email → endereço de e-mail
+- Telefone, Fone → número de telefone
+- Finalidade, Objetivo → finalidade do documento (NDA)
+- Informações, Confidencial → descrição de informações protegidas (NDA)
+- Prazo de sigilo, Confidencialidade → número de anos de sigilo
+- Vigência → número de meses de vigência
+- Multa, Penalidade → valor monetário da multa
+- Título, Nome do relatório → título do relatório
+- Resumo, Resumo executivo → texto do resumo
+- Resultados, Principais resultados → texto dos resultados
+- Recomendações → texto das recomendações
+- Descrição, Serviços → descrição dos serviços prestados
+- Escopo, Entregas → escopo detalhado do projeto
+- Itens, Produtos → itens do orçamento
+- Quantidade, Qtd → quantidade e unidade
+- Prazo de entrega, Prazo de execução → prazo em texto livre
+- Validade → número de dias de validade
+- Pagamento, Forma de pagamento → condição de pagamento em texto
+
+## LISTA SEM LABELS
+Se a mensagem for uma lista implícita (sem labels), associe cada item ao campo na ORDEM da lista de campos fornecida na instrução.
 
 ## NORMALIZAÇÃO
 - CNPJ: apenas 14 dígitos. Ex: "12.345.678/0001-99" → "12345678000199"
 - CPF: apenas 11 dígitos. Ex: "123.456.789-01" → "12345678901"
 - RG: apenas dígitos. Ex: "12.345.678-9" → "123456789"
 - Datas: DD/MM/AAAA. Ex: "01-07-26" → "01/07/2026"
-- Valores monetários: só o número. Ex: "R$ 50.000,00" → "50000.00", "50000" → "50000"
-- Prazo em dias: só o número. Ex: "30 dias" → "30", "2 meses" → "60"
+- Valores monetários: só o número inteiro ou decimal. Ex: "R$ 50.000,00" → "50000", "R$ 25.500,50" → "25500.50"
+- Prazos numéricos (anos, meses, dias): só o número. Ex: "5 anos" → "5", "24 meses" → "24"
 - Estado (UF): sigla 2 letras maiúsculas. Ex: "São Paulo" → "SP"
-- Textos livres (cargo, nome, objeto, forma_pagamento): capitalize normalmente, sem truncar.
+- Textos livres (cargo, nome, objeto, descrição, resumo, recomendações): mantenha o texto completo, capitalize normalmente.
 
 ## ANTI-ALUCINAÇÃO
 - Se ambíguo, retorne "".
@@ -415,6 +564,393 @@ Normalize: CNPJ/CPF sem pontuação, datas DD/MM/AAAA, valores sem R$ com ponto 
     return valor;
   } catch (err) {
     logger.error({ err, campo }, '[Groq] Erro na extração de campo único');
+    return null;
+  }
+}
+
+// ============================================================
+// Geração de resposta conversacional — dá voz humana à IA
+// ============================================================
+
+export interface RespostaConversacionalInput {
+  situacao: 'boas_vindas' | 'inicio_workflow' | 'campos_salvos' | 'campos_invalidos'
+          | 'sem_extracao' | 'workflow_completo' | 'cancelado' | 'ajuda'
+          | 'confirmado' | 'editando_campo' | 'campo_nao_encontrado' | 'chat_livre'
+          | 'explicar_campo';
+  tipoDocumento?: string;
+  camposSalvos?: string[];      // labels legíveis dos campos
+  camposInvalidos?: string[];   // mensagens de erro
+  camposFaltando?: string[];    // labels dos campos pendentes no grupo
+  grupAtual?: string;           // label do grupo atual
+  nextQuestion?: string;        // TEXTO EXATO da próxima pergunta — a IA DEVE usar isso literalmente
+  campoCorrendo?: string;       // label do campo que está sendo corrigido
+  resumoFinal?: string;         // markdown do resumo dos dados
+  mensagemUsuario?: string;     // mensagem original (para contexto)
+  dadosDocumento?: Record<string, string>; // dados coletados, para responder perguntas livres
+  historicoRecente?: Array<{ role: 'user' | 'assistant'; content: string }>; // últimos turns
+}
+
+const SYSTEM_CONVERSACIONAL = `Você é a BepeAI, especialista em automação documental jurídica para empresas brasileiras.
+
+Seu papel duplo: (1) conduzir coleta de dados para documentos jurídicos profissionais e (2) atuar como consultora documental — explicando campos, cláusulas, obrigatoriedades e boas práticas, tanto durante quanto após a coleta.
+
+═══════════════════════════════════════════
+PERSONALIDADE E TOM
+═══════════════════════════════════════════
+• Profissional, direta, confiante — nunca robótica nem excessivamente formal
+• Linguagem executiva brasileira: clara, precisa, sem jargão desnecessário
+• Confirma recebimentos de forma natural e sucinta
+• NUNCA começa com "Claro!", "Com certeza!", "Ótimo!" — use frases mais sofisticadas
+• Mensagens curtas: 3–6 linhas no máximo durante a coleta; até 10 linhas para explicações
+• Máximo 1 emoji por mensagem, apenas quando genuinamente agrega valor
+
+═══════════════════════════════════════════
+BASE DE CONHECIMENTO JURÍDICO
+═══════════════════════════════════════════
+
+CNPJ (Cadastro Nacional de Pessoas Jurídicas):
+• 14 dígitos que identificam uma empresa perante a Receita Federal
+• Formato: XX.XXX.XXX/XXXX-XX — mas você aceita qualquer formato e normaliza
+• Por que é obrigatório: valida que a empresa existe legalmente; sem CNPJ o documento não tem valor probatório em disputas judiciais
+• Se alguém perguntar "preciso mesmo do CNPJ?": sim, é essencial para qualquer documento B2B
+
+CPF (Cadastro de Pessoas Físicas):
+• 11 dígitos que identificam o representante legal que assina pelo CNPJ
+• Por que é necessário: a assinatura no documento é de uma pessoa física em nome da empresa; sem CPF não há como identificar o signatário
+• Se alguém não tiver em mãos: peça que consulte no cartão ou no gov.br
+
+RG (Registro Geral):
+• Documento de identidade estadual — pode ter formato variado por estado
+• No contrato, identifica o representante legal com mais precisão que o CPF
+• Se alguém perguntar "qual documento?": RG da carteira de identidade mesmo
+
+OBJETO DO CONTRATO / OBJETO DOS SERVIÇOS:
+• A cláusula mais importante do contrato — define exatamente o que foi contratado
+• Se for vago ("consultoria"), em caso de disputa judicial ninguém sabe o que era para entregar
+• Boas práticas: ser específico ("desenvolvimento de sistema web de gestão de estoque com módulos X, Y, Z")
+• Se o usuário escrever algo genérico, oriente gentilmente a ser mais específico
+
+FORO (Comarca):
+• Define qual cidade/tribunal será competente para julgar disputas deste contrato
+• Geralmente é a cidade da empresa contratante ou onde o serviço é prestado
+• Por que importa: se não definir, qualquer parte pode acionar em qualquer comarca do Brasil
+• Exemplo: "São Paulo", "Belo Horizonte", "Rio de Janeiro"
+
+VIGÊNCIA / PRAZO DO CONTRATO:
+• Data de início e data de fim da relação contratual
+• Importante: datas no formato DD/MM/AAAA
+• Contratos sem data de fim são por prazo indeterminado — não recomendado para serviços pontuais
+
+AVISO PRÉVIO (rescisão):
+• Quantos dias antes uma parte precisa notificar a outra para rescindir sem penalidade
+• Padrão de mercado: 30 dias para contratos de prestação de serviços
+• Proteção mútua: dá tempo para quem presta reorganizar agenda; para quem contrata encontrar substituto
+
+VALOR E FORMA DE PAGAMENTO:
+• Valor total: sempre em reais; o extenso é gerado automaticamente
+• Forma de pagamento: "50% na assinatura, 50% na entrega", "mensal", "parcelado em 3x", etc.
+• Dia de vencimento: dia do mês em que o pagamento é devido (ex: dia 10, dia 30)
+
+PROPOSTA COMERCIAL — diferença para contrato:
+• Proposta é uma oferta formal, não um compromisso — tem prazo de validade
+• Se aceita, gera um contrato; se não aceita, expira
+• Validade típica: 15 a 30 dias — depois pode haver reajuste de valores
+
+ORÇAMENTO — diferença para proposta:
+• Orçamento é ainda mais informal que proposta — detalhamento de custo sem negociação jurídica
+• Não cria obrigações legais entre as partes por si só
+• Útil para empresas que precisam de 3 orçamentos para licitação ou aprovação interna
+
+NDA (Acordo de Confidencialidade):
+• Protege informações estratégicas trocadas antes de uma parceria, negociação ou contratação
+• Parte Divulgadora: quem compartilha as informações (geralmente quem tem o segredo)
+• Parte Receptora: quem recebe e se compromete a manter sigilo
+• Vigência: tempo de duração do NDA (ex: 12 meses do projeto)
+• Prazo de confidencialidade: tempo que o sigilo continua após o NDA encerrar (ex: 3 anos)
+• Penalidade: valor da multa por violação — deve ser alto o suficiente para ser dissuasivo
+• Se alguém perguntar "quanto colocar de penalidade?": entre 10% e 50% do valor do negócio envolvido é padrão
+
+RELATÓRIO FINAL:
+• Documento que formaliza e registra atividades de um período
+• Importante para compliance, auditorias, prestação de contas a sócios ou clientes
+• Não é um contrato — não gera obrigações, apenas registra o histórico
+
+═══════════════════════════════════════════
+PROBLEMAS COMUNS QUE VOCÊ PREVINE
+═══════════════════════════════════════════
+• Usuário fornece CNPJ com pontos/barras/traços → você normaliza silenciosamente, não pede para repetir
+• Usuário fornece data em formato errado (01-07-26) → você converte para DD/MM/AAAA automaticamente
+• Usuário escreve objeto genérico ("consultoria") → você gentilmente pede mais detalhes
+• Usuário não sabe o que é "foro" → você explica em 1 frase e dá exemplos
+• Usuário pergunta "posso pular esse campo?" → você explica a importância mas respeita a decisão
+• Usuário parece confuso com múltiplas perguntas → você foca na mais importante e aguarda
+• Usuário tenta fornecer dados de um grupo enquanto outro está em andamento → você salva o que conseguir e avança
+
+═══════════════════════════════════════════
+CAPACIDADES DE CÁLCULO E CONSULTA
+═══════════════════════════════════════════
+• "Qual o valor por mês?" → divide valor_total pelo número de meses do contrato
+• "Quem é o contratante?" → busca nos dados e responde com nome e empresa
+• "Qual a data de vencimento?" → informa data_fim do contrato
+• "Quanto falta para terminar?" → calcula com base em data_fim e data atual
+• "Qual o valor total em extenso?" → converte o número para texto por extenso
+
+═══════════════════════════════════════════
+REGRAS ABSOLUTAS
+═══════════════════════════════════════════
+• NUNCA invente dados que não foram fornecidos pelo usuário
+• Use **negrito** para destacar nomes, valores e datas importantes
+• Use bullet points (•) para listas — nunca hífens soltos ou asteriscos
+• Responda SOMENTE o texto da mensagem — sem meta-comentários como "Aqui está minha resposta:"
+• Durante a coleta: responda perguntas do usuário e SEMPRE retorne à coleta na mesma mensagem`;
+
+
+// Monta bloco de contexto dos dados coletados — injetado em todos os prompts
+function buildContextoDocumento(input: RespostaConversacionalInput): string {
+  const dados = input.dadosDocumento ?? {};
+  const temDados = Object.keys(dados).length > 0;
+  if (!temDados && !input.tipoDocumento) return '';
+
+  const linhas: string[] = [];
+  if (input.tipoDocumento) {
+    linhas.push(`DOCUMENTO EM ELABORAÇÃO: ${input.tipoDocumento}`);
+  }
+  if (temDados) {
+    linhas.push('DADOS JÁ COLETADOS (use para responder perguntas do usuário):');
+    for (const [k, v] of Object.entries(dados)) {
+      linhas.push(`  ${k}: ${v}`);
+    }
+  }
+  return linhas.join('\n');
+}
+
+export async function gerarRespostaConversacional(
+  input: RespostaConversacionalInput
+): Promise<string | null> {
+  const contextoDocumento = buildContextoDocumento(input);
+  let prompt = '';
+
+  // Prefixo de contexto — injetado em todos os prompts quando há dados coletados
+  const ctxPrefix = contextoDocumento ? `${contextoDocumento}\n\n` : '';
+
+  switch (input.situacao) {
+    case 'boas_vindas':
+      prompt = `${ctxPrefix}O usuário acabou de entrar na plataforma BepeAI. Dê boas-vindas de forma executiva e confiante.
+
+Apresente os 5 tipos de documento disponíveis:
+• Contrato de Prestação de Serviços — formaliza relações de trabalho autônomo
+• Proposta Comercial — oferta profissional com validade e escopo definidos
+• Orçamento — detalhamento de custos para aprovação interna ou cotação
+• Relatório Final — consolidação de resultados de um período
+• Acordo de Confidencialidade (NDA) — protege informações estratégicas
+
+Pergunte qual documento ele precisa hoje. Tom: profissional, acolhedor, direto.
+Não use emojis em excesso. Máximo 8 linhas.`;
+      break;
+
+    case 'inicio_workflow': {
+      const NOMES_DOCUMENTO: Record<string, string> = {
+        contrato:           'Contrato de Prestação de Serviços',
+        proposta_comercial: 'Proposta Comercial',
+        orcamento:          'Orçamento',
+        relatorio_final:    'Relatório Final',
+        nda:                'Acordo de Confidencialidade (NDA)',
+      };
+      const CONTEXTO_DOCUMENTO: Record<string, string> = {
+        contrato:           'Este contrato formaliza a prestação de serviços entre duas empresas, protegendo ambas as partes quanto a escopo, pagamento, prazo e propriedade intelectual.',
+        proposta_comercial: 'Esta proposta é uma oferta formal com validade definida — se aceita, origina um contrato. É o seu cartão de visitas comercial.',
+        orcamento:          'Este orçamento detalha custos e condições para aprovação — não é um contrato, mas é o primeiro passo formal para fechar negócio.',
+        relatorio_final:    'Este relatório consolida atividades e resultados de um período — fundamental para compliance, prestação de contas e auditorias.',
+        nda:                'Este NDA protege informações confidenciais trocadas entre as partes antes ou durante uma parceria. Essencial antes de revelar dados estratégicos.',
+      };
+      const nomeDoc = (input.tipoDocumento && NOMES_DOCUMENTO[input.tipoDocumento])
+        ? NOMES_DOCUMENTO[input.tipoDocumento]
+        : (input.tipoDocumento ?? 'documento');
+      const contextoDoc = (input.tipoDocumento && CONTEXTO_DOCUMENTO[input.tipoDocumento])
+        ? CONTEXTO_DOCUMENTO[input.tipoDocumento]
+        : '';
+      prompt = `${ctxPrefix}O usuário quer criar: ${nomeDoc}.
+${contextoDoc ? `Contexto do documento: ${contextoDoc}` : ''}
+
+Confirme que você vai iniciar a coleta de dados de forma organizada, em grupos.
+Informe que pode fornecer vários dados de uma vez (ex: "Empresa X, CNPJ 12345678000199, endereço Rua Y") para agilizar.
+Faça a primeira pergunta do grupo "${input.grupAtual}" usando EXATAMENTE o texto da nextQuestion fornecida.
+Seja entusiasmado mas profissional. Máximo 6 linhas.`;
+      break;
+    }
+
+    case 'campos_salvos':
+      prompt = `${ctxPrefix}Campos salvos com sucesso: ${input.camposSalvos?.join(', ') ?? ''}.
+
+Confirme o recebimento em UMA frase curta e natural (ex: "Dados recebidos.", "Perfeito, anotado.").
+${input.nextQuestion
+  ? `Em seguida, faça EXATAMENTE esta pergunta (pode reformular levemente para soar natural, mas mantenha todos os campos pedidos):\n\n${input.nextQuestion}\n\nDICA PROATIVA (adicione quando relevante): se a pergunta pede CNPJ, mencione que aceita com ou sem formatação. Se pede datas, mencione DD/MM/AAAA. Se pede valor, mencione que pode digitar só os números.`
+  : `Grupo "${input.grupAtual}" concluído. Informe de forma breve que vai avançar para o próximo conjunto de dados.`
+}
+
+REGRAS: Não liste os campos já salvos. Não invente campos. Máximo 6 linhas.`;
+      break;
+
+    case 'campos_invalidos':
+      prompt = `${ctxPrefix}O usuário forneceu dados, mas alguns têm problemas de formato:
+${input.camposInvalidos?.map(e => `• ${e}`).join('\n') ?? ''}
+${input.camposSalvos?.length ? `\nSalvos com sucesso:\n${input.camposSalvos.map(c => `• ${c}`).join('\n')}` : ''}
+
+Explique o problema de forma CONSTRUTIVA e educativa (ex: "CNPJ precisa ter 14 dígitos — o que você enviou tem X dígitos").
+Use sua base de conhecimento para explicar por que o formato correto é importante.
+Peça para reenviar APENAS os campos com problema, em uma linha só.
+Máximo 5 linhas.`;
+      break;
+
+    case 'sem_extracao':
+      prompt = `${ctxPrefix}O usuário enviou: "${input.mensagemUsuario}".
+Não consegui identificar os dados para o grupo "${input.grupAtual}".
+
+PASSO 1 — Analise a mensagem:
+• É uma PERGUNTA sobre o documento ou sobre um campo? (ex: "o que é foro?", "preciso do CNPJ?", "qual a diferença?")
+  → Responda com sua base de conhecimento jurídico. Depois retorne à pergunta.
+• É uma resposta no formato errado ou incompleta?
+  → Explique gentilmente o que está faltando e por que aquele dado é importante.
+• O usuário parece confuso ou travado?
+  → Ofereça um exemplo concreto do que está sendo pedido.
+
+PASSO 2 — Sempre termine voltando EXATAMENTE para esta pergunta:
+${input.nextQuestion ?? `Forneça os dados do grupo "${input.grupAtual}".`}
+
+Máximo 6 linhas. Tom: paciente, educativo, sem julgamento.`;
+      break;
+
+    case 'workflow_completo':
+      prompt = `${ctxPrefix}Todos os dados foram coletados com sucesso.
+
+Resumo dos dados:
+${input.resumoFinal}
+
+Informe ao usuário que o documento está pronto para geração.
+Instrua: pode clicar em **"Gerar PDF"** ou dizer "corrigir [campo]" se precisar ajustar algo.
+Mencione que após gerar pode tirar qualquer dúvida sobre o documento.
+Tom: celebrativo mas direto. Máximo 4 linhas.`;
+      break;
+
+    case 'cancelado':
+      prompt = `${ctxPrefix}O usuário cancelou/reiniciou. Confirme positivamente e sem drama.
+
+Apresente os documentos disponíveis de forma concisa e pergunte qual deseja criar agora:
+• Contrato de Prestação de Serviços
+• Proposta Comercial
+• Orçamento
+• Relatório Final
+• Acordo de Confidencialidade (NDA)
+
+Máximo 6 linhas.`;
+      break;
+
+    case 'ajuda':
+      prompt = `${ctxPrefix}O usuário pediu ajuda. Responda de forma estruturada e prática.
+
+Explique:
+1. Como iniciar: diga o tipo de documento ("quero um contrato", "fazer NDA", etc.)
+2. Como fornecer dados: pode dar vários de uma vez na mesma mensagem, separados por vírgula ou em linhas
+3. Formatos aceitos: CNPJ com ou sem pontuação, datas em qualquer formato, valores com ou sem R$
+4. Como corrigir um campo: diga "corrigir [nome do campo]" (ex: "corrigir empresa", "corrigir valor")
+5. Como recomeçar: diga "cancelar" ou "nova conversa"
+6. Tirar dúvidas: pode perguntar "o que é foro?", "preciso do RG?", "por que CNPJ?" a qualquer momento
+
+Máximo 10 linhas, use bullet points numerados.`;
+      break;
+
+    case 'confirmado':
+      prompt = `${ctxPrefix}O usuário confirmou a geração do PDF.
+Confirme em 1–2 linhas com tom profissional. Mencione que o documento está sendo preparado.`;
+      break;
+
+    case 'editando_campo':
+      prompt = `${ctxPrefix}O usuário quer corrigir o campo "${input.campoCorrendo}".
+
+Confirme que vai corrigir esse campo.
+Peça o novo valor de forma clara e direta.
+Se for um campo técnico (CNPJ, CPF, data), mencione o formato esperado.
+Máximo 3 linhas.`;
+      break;
+
+    case 'campo_nao_encontrado':
+      prompt = `${ctxPrefix}O usuário pediu para corrigir "${input.campoCorrendo}" mas esse campo não foi reconhecido.
+
+Informe gentilmente que não encontrou esse campo.
+Sugira exemplos de campos que existem no documento atual (use os dados já coletados acima para sugerir nomes reais).
+Instrua o formato correto: "corrigir empresa", "corrigir cnpj", "corrigir data_inicio", etc.
+Máximo 4 linhas.`;
+      break;
+
+    case 'explicar_campo':
+      prompt = `${ctxPrefix}O usuário fez uma pergunta sobre um campo, cláusula ou aspecto jurídico do documento.
+Mensagem: "${input.mensagemUsuario}"
+
+Use sua base de conhecimento jurídico para responder com precisão e didatismo:
+• Explique o que o campo/cláusula significa
+• Explique por que é obrigatório ou recomendado neste tipo de documento
+• Dê um exemplo concreto de como preencher, se aplicável
+• Se houver risco jurídico em deixar em branco ou preencher errado, mencione brevemente
+
+Após a explicação, retorne gentilmente para a coleta com a próxima pergunta:
+${input.nextQuestion ?? `Continuando a coleta para o grupo "${input.grupAtual}".`}
+
+Tom: especialista consultivo, claro, sem jargão excessivo. Máximo 8 linhas.`;
+      break;
+
+    case 'chat_livre':
+      prompt = `Mensagem do usuário: "${input.mensagemUsuario}"
+
+Responda com base nos dados já coletados e na sua base de conhecimento jurídico.
+
+PRIORIDADE DE RESPOSTA:
+1. Se é pergunta sobre dado específico já coletado → responda com o valor exato em **negrito**
+2. Se é pergunta sobre o que um campo significa / por que é necessário → explique usando a base de conhecimento jurídico
+3. Se é pergunta sobre cálculo (valor por mês, tempo restante) → calcule e responda
+4. Se é dúvida sobre o documento gerado → explique a cláusula ou campo com base no tipo de documento
+5. Se não há como responder → seja honesto e sugira onde encontrar a informação
+6. Se parece que quer criar novo documento → sugira dizer o tipo
+
+Tom: consultivo, especialista, direto. Máximo 6 linhas.`;
+      break;
+  }
+
+  // Sistema com contexto de documento injetado diretamente no system prompt
+  // para garantir que a IA sempre tem os dados disponíveis
+  const systemComContexto = contextoDocumento
+    ? `${SYSTEM_CONVERSACIONAL}\n\n${contextoDocumento}`
+    : SYSTEM_CONVERSACIONAL;
+
+  // Monta a lista de mensagens — chat_livre usa multi-turn com histórico
+  const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+    { role: 'system', content: systemComContexto },
+  ];
+
+  if (input.situacao === 'chat_livre' && input.historicoRecente?.length) {
+    // Injeta histórico recente para continuidade conversacional
+    for (const turn of input.historicoRecente) {
+      messages.push({ role: turn.role, content: turn.content });
+    }
+  }
+
+  messages.push({ role: 'user', content: prompt });
+
+  try {
+    const completion = await withRetry(
+      () => groq.chat.completions.create({
+        messages,
+        model: MODEL_CONVERSATIONAL,
+        temperature: input.situacao === 'chat_livre' ? 0.65 : 0.55,
+        max_tokens: input.situacao === 'chat_livre' ? 450 : 300,
+      }),
+      'gerarRespostaConversacional'
+    );
+
+    const texto = completion.choices[0]?.message?.content?.trim() ?? null;
+    logger.debug({ situacao: input.situacao, turns: messages.length }, '[Groq] Resposta gerada');
+    return texto;
+  } catch (err) {
+    logger.error({ err, situacao: input.situacao }, '[Groq] Erro na geração conversacional');
     return null;
   }
 }

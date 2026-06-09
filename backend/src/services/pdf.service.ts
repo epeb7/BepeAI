@@ -124,9 +124,9 @@ function numeroPorExtenso(v: string): string {
 function formatarCampo(key: string, valor: string): string {
   const limpo = limparValor(valor);
   if (limpo === '___________') return limpo;
-  if (key.endsWith('_cnpj') || key === 'cnpj') return formatarCNPJ(limpo);
-  if (key.endsWith('_cpf')  || key === 'cpf')  return formatarCPF(limpo);
-  if (key === 'valor_total'  || key === 'valor') return formatarMoeda(limpo);
+  if (key.includes('cnpj'))            return formatarCNPJ(limpo);
+  if (key.includes('cpf'))             return formatarCPF(limpo);
+  if (key === 'valor_total' || key === 'valor' || key === 'valor_unitario' || key === 'penalidade_valor') return formatarMoeda(limpo);
   return limpo;
 }
 
@@ -136,6 +136,7 @@ const TITULOS: Record<string, string> = {
   proposta_comercial: 'PROPOSTA COMERCIAL',
   relatorio_final:    'RELATÓRIO FINAL',
   orcamento:          'ORÇAMENTO',
+  nda:                'ACORDO DE CONFIDENCIALIDADE (NDA)',
 };
 
 // ── Contexto de renderização ──────────────────────────────────
@@ -346,11 +347,11 @@ function drawClauseTitle(ctx: RenderCtx, text: string): void {
   ctx.y -= 14;
 }
 
-// ── Bloco de assinaturas profissional ─────────────────────────
+// ── Bloco de assinaturas — contrato (duas partes + testemunhas) ──
 function drawSignatureBlock(
   ctx: RenderCtx,
-  left: { empresa: string; nome: string; cpf: string },
-  right: { empresa: string; nome: string; cpf: string },
+  left: { empresa: string; nome: string; cpf: string; papel: string },
+  right: { empresa: string; nome: string; cpf: string; papel: string },
   cidade: string,
   data: string,
 ): void {
@@ -362,12 +363,14 @@ function drawSignatureBlock(
   const rx = ctx.margin.left + colW + 24;
 
   // Local e data centralizados
-  const localData = `${cidade}, ${data}`;
-  const ldW = ctx.font.widthOfTextAtSize(localData, 9.5);
-  ctx.page.drawText(localData, {
-    x: (ctx.pageWidth - ldW) / 2, y: ctx.y,
-    size: 9.5, font: ctx.fontOblique, color: GRAY_MID,
-  });
+  const localData = cidade && data ? `${cidade}, ${data}` : data || cidade || '';
+  if (localData) {
+    const ldW = ctx.font.widthOfTextAtSize(localData, 9.5);
+    ctx.page.drawText(localData, {
+      x: (ctx.pageWidth - ldW) / 2, y: ctx.y,
+      size: 9.5, font: ctx.fontOblique, color: GRAY_MID,
+    });
+  }
   ctx.y -= 28;
 
   // Linhas de assinatura
@@ -380,9 +383,9 @@ function drawSignatureBlock(
   ctx.page.drawText(right.empresa.toUpperCase(), { x: rx, y: ctx.y, size: 8.5, font: ctx.fontBold, color: GRAY_DARK });
   ctx.y -= 10;
 
-  // Papel (CONTRATANTE / CONTRATADO)
-  ctx.page.drawText('CONTRATANTE', { x: lx, y: ctx.y, size: 8, font: ctx.font, color: GRAY_MID });
-  ctx.page.drawText('CONTRATADO',  { x: rx, y: ctx.y, size: 8, font: ctx.font, color: GRAY_MID });
+  // Papel
+  ctx.page.drawText(left.papel,  { x: lx, y: ctx.y, size: 8, font: ctx.font, color: GRAY_MID });
+  ctx.page.drawText(right.papel, { x: rx, y: ctx.y, size: 8, font: ctx.font, color: GRAY_MID });
   ctx.y -= 14;
 
   // Nome do representante
@@ -405,6 +408,38 @@ function drawSignatureBlock(
   ctx.y -= 8;
   ctx.page.drawText('Nome / CPF',  { x: lx, y: ctx.y, size: 7, font: ctx.font, color: GRAY_LIGHT });
   ctx.page.drawText('Nome / CPF',  { x: rx, y: ctx.y, size: 7, font: ctx.font, color: GRAY_LIGHT });
+}
+
+// ── Bloco de assinatura único (emitente/responsável) ──────────
+function drawSingleSignature(
+  ctx: RenderCtx,
+  empresa: string,
+  responsavel: string,
+  papel: string,
+  localData?: string,
+): void {
+  ensureSpace(ctx, 90);
+  ctx.y -= 16;
+
+  if (localData) {
+    const ldW = ctx.font.widthOfTextAtSize(localData, 9.5);
+    ctx.page.drawText(localData, {
+      x: (ctx.pageWidth - ldW) / 2, y: ctx.y,
+      size: 9.5, font: ctx.fontOblique, color: GRAY_MID,
+    });
+    ctx.y -= 28;
+  }
+
+  const colW = (ctx.maxWidth - 24) / 2;
+  const cx   = ctx.margin.left + colW / 2;
+
+  ctx.page.drawLine({ start: { x: cx, y: ctx.y }, end: { x: cx + colW, y: ctx.y }, thickness: 0.8, color: GRAY_DARK });
+  ctx.y -= 11;
+  ctx.page.drawText(empresa.toUpperCase(), { x: cx, y: ctx.y, size: 8.5, font: ctx.fontBold, color: GRAY_DARK });
+  ctx.y -= 10;
+  ctx.page.drawText(papel,                 { x: cx, y: ctx.y, size: 8,   font: ctx.font,     color: GRAY_MID  });
+  ctx.y -= 11;
+  ctx.page.drawText(`Repr.: ${responsavel}`, { x: cx, y: ctx.y, size: 8, font: ctx.font,     color: GRAY_MID  });
 }
 
 // ── Rodapé ────────────────────────────────────────────────────
@@ -452,10 +487,11 @@ function renderContent(ctx: RenderCtx, conteudo: string, dados: Record<string, s
 
     if (linha === '') { ctx.y -= 3; i++; continue; }
 
-    // Qualificação das partes
-    if (/^(CONTRATANTE|CONTRATADO):\s/.test(linha)) {
-      const label   = linha.startsWith('CONTRATANTE') ? 'CONTRATANTE' : 'CONTRATADO';
-      const content = linha.replace(/^(CONTRATANTE|CONTRATADO):\s*/, '');
+    // Qualificação das partes — qualquer rótulo seguido de ":"
+    if (/^(CONTRATANTE|CONTRATADO|EMITENTE|DESTINATÁRIO|SOLICITANTE|EMPRESA|RESPONSÁVEL|PARTE DIVULGADORA|PARTE RECEPTORA):\s/.test(linha)) {
+      const colonIdx = linha.indexOf(':');
+      const label    = linha.slice(0, colonIdx);
+      const content  = linha.slice(colonIdx + 1).trim();
       drawParty(ctx, label + ':', content);
       i++; continue;
     }
@@ -478,28 +514,67 @@ function renderContent(ctx: RenderCtx, conteudo: string, dados: Record<string, s
       i++; continue;
     }
 
-    // Bloco de assinaturas — marcador especial
+    // ── Marcadores de assinatura ──────────────────────────────
+
+    // Contrato: duas partes (contratante × contratado)
     if (linha === 'ASSINATURAS') {
       drawSignatureBlock(
         ctx,
-        {
-          empresa: dados['contratante_empresa'] ?? 'CONTRATANTE',
-          nome:    dados['contratante_nome']    ?? '',
-          cpf:     formatarCPF(dados['contratante_cpf'] ?? ''),
-        },
-        {
-          empresa: dados['contratado_empresa'] ?? 'CONTRATADO',
-          nome:    dados['contratado_nome']    ?? '',
-          cpf:     formatarCPF(dados['contratado_cpf'] ?? ''),
-        },
+        { empresa: dados['contratante_empresa'] ?? 'CONTRATANTE', nome: dados['contratante_nome'] ?? '', cpf: formatarCPF(dados['contratante_cpf'] ?? ''), papel: 'CONTRATANTE' },
+        { empresa: dados['contratado_empresa']  ?? 'CONTRATADO',  nome: dados['contratado_nome']  ?? '', cpf: formatarCPF(dados['contratado_cpf']  ?? ''), papel: 'CONTRATADO'  },
         dados['cidade_assinatura'] ?? '',
         dados['data_assinatura']   ?? '',
       );
       i++; continue;
     }
 
-    // Linha de local/data embutida no template (pular — já tratada no bloco de assinatura)
-    if (/^LOCAL_ASSINATURA:/.test(linha)) { i++; continue; }
+    // NDA: divulgadora × receptora
+    if (linha === 'NDA_ASSINATURAS') {
+      drawSignatureBlock(
+        ctx,
+        { empresa: dados['divulgadora_empresa'] ?? 'PARTE DIVULGADORA', nome: dados['divulgadora_representante'] ?? '', cpf: formatarCPF(dados['divulgadora_cpf'] ?? ''), papel: 'PARTE DIVULGADORA' },
+        { empresa: dados['receptora_empresa']   ?? 'PARTE RECEPTORA',   nome: dados['receptora_representante']   ?? '', cpf: formatarCPF(dados['receptora_cpf']   ?? ''), papel: 'PARTE RECEPTORA'   },
+        dados['cidade_assinatura'] ?? '',
+        dados['data_assinatura']   ?? '',
+      );
+      i++; continue;
+    }
+
+    // Proposta: assinatura única do emitente
+    if (linha === 'PROPOSTA_ASSINATURA') {
+      drawSingleSignature(
+        ctx,
+        dados['emitente_empresa']     ?? 'EMITENTE',
+        dados['emitente_responsavel'] ?? '',
+        'EMITENTE',
+      );
+      i++; continue;
+    }
+
+    // Orçamento: assinatura única do emitente
+    if (linha === 'ORCAMENTO_ASSINATURA') {
+      drawSingleSignature(
+        ctx,
+        dados['empresa_emitente']      ?? 'EMITENTE',
+        dados['responsavel_emitente']  ?? '',
+        'EMITENTE',
+      );
+      i++; continue;
+    }
+
+    // Relatório: assinatura única do responsável
+    if (linha === 'RELATORIO_ASSINATURA') {
+      drawSingleSignature(
+        ctx,
+        dados['empresa']      ?? 'EMPRESA',
+        dados['responsavel']  ?? '',
+        dados['cargo_responsavel'] ?? 'RESPONSÁVEL',
+      );
+      i++; continue;
+    }
+
+    // Linhas de local/data embutidas no template (já incorporadas nos blocos acima)
+    if (/^LOCAL_ASSINATURA:|^LOCAL_EMISSAO:/.test(linha)) { i++; continue; }
 
     // Linha introdutória principal ("Pelo presente instrumento...")
     if (/^Pelo presente instrumento/i.test(linha)) {
@@ -514,10 +589,18 @@ function renderContent(ctx: RenderCtx, conteudo: string, dados: Record<string, s
       i++; continue;
     }
 
-    // Cabeçalhos de lista ("Constituem obrigações...", "Este contrato poderá...")
-    const isListHeader = /Constituem obrigações|Este contrato poderá/i.test(linha);
+    // Cabeçalhos de lista
+    const isListHeader = /Constituem obrigações|Este contrato poderá|descumprimento de qualquer/i.test(linha);
     if (isListHeader) {
       drawParagraph(ctx, linha, { size: 9.5, justify: true, afterGap: 2 });
+      i++; continue;
+    }
+
+    // Metadados inline (Data de emissão:, PERÍODO:, etc.) — renderiza como bold + valor
+    const metaMatch = linha.match(/^(Data de emissão|PERÍODO|Período):\s+(.+)$/i);
+    if (metaMatch) {
+      ctx.y -= 2;
+      drawParagraph(ctx, linha, { size: 9, bold: false, italic: true, justify: false, afterGap: 4, color: GRAY_MID });
       i++; continue;
     }
 
@@ -536,12 +619,21 @@ export async function gerarPDF(
   // 1. Preenche template
   let template = await carregarTemplate(tipoDocumento);
 
-  // Campos derivados (extenso)
-  const dadosCompletos = {
+  // Campos derivados (extenso e formatados)
+  const dadosCompletos: Record<string, string> = {
     ...dados,
-    valor_total_extenso:    valorParaExtenso(dados['valor_total'] ?? ''),
-    aviso_previo_extenso:   numeroPorExtenso(dados['aviso_previo'] ?? ''),
-    data_assinatura_formatada: dados['data_assinatura'] ?? '',
+    // contrato
+    valor_total_extenso:         valorParaExtenso(dados['valor_total']       ?? ''),
+    aviso_previo_extenso:        numeroPorExtenso(dados['aviso_previo']      ?? ''),
+    data_assinatura_formatada:   dados['data_assinatura']                    ?? '',
+    // proposta
+    validade_proposta_extenso:   numeroPorExtenso(dados['validade_proposta'] ?? ''),
+    // orcamento
+    valor_unitario_extenso:      valorParaExtenso(dados['valor_unitario']    ?? ''),
+    // nda
+    vigencia_meses_extenso:      numeroPorExtenso(dados['vigencia_meses']    ?? ''),
+    prazo_confidencialidade_extenso: numeroPorExtenso(dados['prazo_confidencialidade'] ?? ''),
+    penalidade_valor_extenso:    valorParaExtenso(dados['penalidade_valor']  ?? ''),
   };
 
   if (template.includes('{{_dados_}}')) {

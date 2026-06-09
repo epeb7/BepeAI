@@ -64,6 +64,7 @@ function autoTitle(workflowType: string | null): string {
     proposta_comercial: 'Proposta Comercial',
     relatorio_final:    'Relatório Final',
     orcamento:          'Orçamento',
+    nda:                'Acordo de Confidencialidade (NDA)',
   };
   const base = workflowType ? (tipos[workflowType] ?? workflowType) : 'Nova conversa';
   const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -72,10 +73,32 @@ function autoTitle(workflowType: string | null): string {
 
 // ── Escrita (non-blocking) ────────────────────────────────────
 
-export async function ensureConversation(userId: string, workflowType: string | null): Promise<string> {
-  const id = `${userId}-${workflowType ?? 'unknown'}-${Date.now()}`;
+export async function ensureConversation(
+  userId: string,
+  workflowType: string | null,
+  existingId?: string
+): Promise<string> {
+  // Se já temos um ID e apenas o workflowType mudou (ex.: usuário digitou "contrato"
+  // depois de uma saudação), atualiza a linha existente em vez de criar uma nova.
+  if (existingId) {
+    await safe('ensureConversation-update', async () => {
+      const { error } = await supabase!
+        .from('conversations')
+        .update({
+          workflow_type: workflowType,
+          title:         autoTitle(workflowType),
+          updated_at:    new Date().toISOString(),
+        })
+        .eq('id', existingId)
+        .eq('user_id', userId);
+      if (error) throw error;
+    });
+    return existingId;
+  }
 
-  await safe('ensureConversation', async () => {
+  const id = `${userId}-${workflowType ?? 'chat'}-${Date.now()}`;
+
+  await safe('ensureConversation-insert', async () => {
     const { error } = await supabase!
       .from('conversations')
       .insert({
