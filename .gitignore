@@ -3,8 +3,16 @@
 # ===========================
 .env
 .env.local
+.env.production
 .env.*.local
 *.env
+
+# ===========================
+# Documentos de segurança
+# ===========================
+DEPLOY_SECRETS.txt
+*_SECRETS.txt
+*_secrets.txt
 
 # ===========================
 # Node / npm

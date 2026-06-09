@@ -24,6 +24,8 @@ export interface WorkflowState {
   conversationId: string | null;
   /** Contador de turns persistido junto ao estado */
   turnNumber: number;
+  /** Tipo de documento pendente de confirmação antes de trocar o workflow ativo */
+  pendingDocumentSwitch?: string | null;
 }
 
 export interface ApplyResult {
@@ -93,17 +95,23 @@ export function getCurrentGroupQuestion(state: WorkflowState): string | null {
     return group.question;
   }
 
-  // Alguns campos já preenchidos → pergunta focalizada nos pendentes
+  // Alguns campos já preenchidos → pergunta focalizada nos pendentes com contexto
   const pendingSteps = workflow.steps.filter(s => pending.includes(s.field));
   const items = pendingSteps
     .map(s => {
       const fieldLabel = s.label ?? s.field.replace(/_/g, ' ');
-      const hint = s.example ? ` (ex: ${s.example})` : '';
-      return `• **${fieldLabel}:** ${s.question}${hint}`;
+      const hint = s.example ? ` (ex: \`${s.example}\`)` : '';
+      const errHint = s.errorMessage ? ` — ${s.errorMessage}` : '';
+      return `• **${fieldLabel}:**${errHint}${hint}`;
     })
     .join('\n');
 
-  return `Ainda preciso de algumas informações de **${group.label}**:\n\n${items}`;
+  const salvos = group.fields.filter(f => !pending.includes(f));
+  const confirmLine = salvos.length > 0
+    ? `✔ Recebi ${salvos.length} de ${group.fields.length} informações deste grupo.\n\n`
+    : '';
+
+  return `${confirmLine}Ainda preciso dos seguintes dados de **${group.label}**:\n\n${items}\n\nPode enviar tudo de uma vez, em linhas separadas.`;
 }
 
 export function getCurrentGroupExample(state: WorkflowState): string | null {
@@ -180,6 +188,39 @@ export function applyExtractedFields(
     } else {
       newData[field] = value.trim();
       saved.push(field);
+    }
+  }
+
+  // ── Validação de coerência entre campos ──────────────────────
+  // data_fim deve ser posterior a data_inicio
+  const parseDataBR = (d: string): Date | null => {
+    const m = d.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    return m ? new Date(+m[3], +m[2] - 1, +m[1]) : null;
+  };
+  const dataInicio = newData['data_inicio'];
+  const dataFim    = newData['data_fim'];
+  if (dataInicio && dataFim) {
+    const di = parseDataBR(dataInicio);
+    const df = parseDataBR(dataFim);
+    if (di && df && df <= di) {
+      const campo = 'data_fim';
+      // Remove data_fim salva neste turno e marca como inválida
+      if (saved.includes(campo)) {
+        saved.splice(saved.indexOf(campo), 1);
+        delete newData[campo];
+        invalid.push({ field: campo, error: 'A data de término deve ser posterior à data de início' });
+      }
+    }
+  }
+  // vigencia_meses e prazo_confidencialidade devem ser números positivos
+  for (const campo of ['vigencia_meses', 'prazo_confidencialidade', 'validade_proposta', 'validade_orcamento', 'aviso_previo'] as const) {
+    if (newData[campo] && saved.includes(campo)) {
+      const n = parseInt(newData[campo], 10);
+      if (isNaN(n) || n <= 0) {
+        saved.splice(saved.indexOf(campo), 1);
+        delete newData[campo];
+        invalid.push({ field: campo, error: `${campo.replace(/_/g, ' ')} deve ser um número positivo` });
+      }
     }
   }
 

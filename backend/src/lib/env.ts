@@ -33,17 +33,31 @@ function optional(name: string): string | null {
 }
 
 function validateJwtSecret(secret: string): void {
+  const isProd = process.env.NODE_ENV === 'production';
+
   if (secret.length < 32) {
     throw new Error(
       `[ENV] JWT_SECRET muito curto (${secret.length} chars). Mínimo: 32 caracteres. ` +
       'Gere um seguro com: openssl rand -hex 32'
     );
   }
-  if (secret.includes('mudar') || secret.includes('change') || secret.includes('secret')) {
-    // Aviso em dev, erro em produção
-    const msg = '[ENV] JWT_SECRET parece ser o valor padrão inseguro. Troque antes de usar em produção.';
-    if (process.env.NODE_ENV === 'production') throw new Error(msg);
+
+  // Detecta qualquer padrão óbvio de valor padrão/inseguro
+  const padroesFracos = ['mudar', 'change', 'secret', 'example', 'test', 'dev', 'default', '1234', 'bepeai'];
+  const isFraco = padroesFracos.some(p => secret.toLowerCase().includes(p));
+
+  if (isFraco) {
+    const msg = '[ENV] JWT_SECRET parece ser um valor padrão inseguro. Troque antes de usar em produção. Use: openssl rand -hex 32';
+    if (isProd) throw new Error(msg);
     console.warn('⚠️  ' + msg);
+  }
+
+  // Em produção, exige entropia mínima: pelo menos 48 chars ou 64 hex chars
+  if (isProd && secret.length < 48) {
+    throw new Error(
+      `[ENV] JWT_SECRET em produção deve ter no mínimo 48 caracteres (atual: ${secret.length}). ` +
+      'Gere com: openssl rand -hex 32'
+    );
   }
 }
 

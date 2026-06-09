@@ -25,62 +25,214 @@ import { ensureConversation, logTurn, completeConversation, getConversationDetai
 // Helpers de domínio
 // ============================================================
 
+// Normaliza string: minúsculas + remove acentos
+function norm(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+// Busca o step que melhor corresponde ao hint do usuário.
+// Estratégia em camadas: exact → field parts → label → label parts → fuzzy substring.
+// Retorna o step com maior score ou null se nenhum atingir threshold mínimo.
+function findStepByHint(hint: string, workflowDef: { steps: Array<{ field: string; label?: string }> }) {
+  const h = norm(hint).replace(/\s+/g, '_');
+  const hWords = norm(hint).split(/\s+/).filter(w => w.length > 1);
+
+  let best: { step: (typeof workflowDef.steps)[number]; score: number } | null = null;
+
+  for (const step of workflowDef.steps) {
+    const fieldNorm  = norm(step.field);
+    const labelNorm  = step.label ? norm(step.label) : '';
+    let score = 0;
+
+    // Nível 1 — correspondência exata
+    if (fieldNorm === h || labelNorm === norm(hint)) { score = 100; }
+    // Nível 2 — campo contém ou é contido no hint
+    else if (fieldNorm.includes(h) || h.includes(fieldNorm)) { score = 80; }
+    // Nível 3 — label contém o hint ou hint contém o label
+    else if (labelNorm && (labelNorm.includes(norm(hint)) || norm(hint).includes(labelNorm))) { score = 75; }
+    // Nível 4 — todas as palavras do hint estão no field ou label
+    else if (hWords.length > 0 && hWords.every(w => fieldNorm.includes(w) || labelNorm.includes(w))) { score = 65; }
+    // Nível 5 — pelo menos metade das palavras do hint batem
+    else if (hWords.length > 1) {
+      const matches = hWords.filter(w => fieldNorm.includes(w) || labelNorm.includes(w)).length;
+      if (matches >= Math.ceil(hWords.length / 2)) score = 50 + matches * 3;
+    }
+    // Nível 6 — qualquer palavra do hint (> 3 chars) aparece no field ou label
+    else {
+      const anyMatch = hWords.some(w => w.length > 3 && (fieldNorm.includes(w) || labelNorm.includes(w)));
+      if (anyMatch) score = 30;
+    }
+
+    if (score > 0 && (!best || score > best.score)) {
+      best = { step, score };
+    }
+  }
+
+  // Threshold mínimo de 30 para evitar falsos positivos
+  return best && best.score >= 30 ? best.step : null;
+}
+
 function isSaudacao(texto: string): boolean {
   const saudacoes = ['oi', 'olá', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'oie', 'e aí', 'opa', 'hey', 'hello', 'eae', 'ei'];
   return saudacoes.some(s => texto.toLowerCase().includes(s));
 }
 
-function detectDocumentType(msg: string): string | null {
-  const lower = msg.toLowerCase();
-  if (lower.includes('nda') || lower.includes('confidencialidade') || lower.includes('sigilo') || lower.includes('non-disclosure')) return 'nda';
-  if (lower.includes('contrato')) return 'contrato';
-  if (lower.includes('proposta')) return 'proposta_comercial';
-  if (lower.includes('relatório') || lower.includes('relatorio') || lower.includes('report')) return 'relatorio_final';
-  if (lower.includes('orçamento') || lower.includes('orcamento') || lower.includes('budget')) return 'orcamento';
+const CLAUSULAS_DOCUMENTO: Record<string, string[]> = {
+  contrato: [
+    'Cláusula 1ª – Do Objeto (serviço contratado)',
+    'Cláusula 2ª – Do Prazo (vigência e prorrogação)',
+    'Cláusula 3ª – Da Remuneração (valor, pagamento, multa por atraso)',
+    'Cláusula 4ª – Das Obrigações do Contratado',
+    'Cláusula 5ª – Das Obrigações do Contratante',
+    'Cláusula 6ª – Da Propriedade Intelectual (direitos sobre os entregáveis)',
+    'Cláusula 7ª – Da Confidencialidade (sigilo por 5 anos)',
+    'Cláusula 8ª – Do Caso Fortuito e Força Maior',
+    'Cláusula 9ª – Da Rescisão (aviso prévio, multas proporcionais)',
+    'Cláusula 10ª – Das Disposições Gerais (integralidade, tolerância, alterações)',
+    'Cláusula 11ª – Do Foro (comarca competente para litígios)',
+  ],
+  proposta_comercial: [
+    'Cláusula 1ª – Da Apresentação (contexto da proposta)',
+    'Cláusula 2ª – Do Objeto (serviços propostos e escopo detalhado)',
+    'Cláusula 3ª – Das Condições Financeiras (valor, pagamento, multa por atraso)',
+    'Cláusula 4ª – Do Prazo de Entrega (cronograma e condições)',
+    'Cláusula 5ª – Da Propriedade Intelectual (entregáveis pós-pagamento)',
+    'Cláusula 6ª – Da Validade (prazo de vigência da proposta)',
+    'Cláusula 7ª – Das Condições Gerais (aditivos, subcontratação, sigilo)',
+    'Cláusula 8ª – Do Aceite (forma de confirmação e prazo para contrato)',
+  ],
+  orcamento: [
+    'Cláusula 1ª – Do Objeto (descrição dos itens/serviços)',
+    'Cláusula 2ª – Da Composição de Valores (descrição, qtd, valor unit., valor total)',
+    'Cláusula 3ª – Do Prazo de Execução (cronograma e condições)',
+    'Cláusula 4ª – Das Condições de Pagamento (forma e multa moratória)',
+    'Cláusula 5ª – Da Validade (prazo e reajuste após vencimento)',
+    'Cláusula 6ª – Das Responsabilidades e Garantias',
+    'Cláusula 7ª – Do Aceite',
+  ],
+  relatorio_final: [
+    'Cláusula 1ª – Identificação (empresa, responsável, título, período)',
+    'Cláusula 2ª – Sumário Executivo (visão geral do período)',
+    'Cláusula 3ª – Principais Resultados (dados e indicadores)',
+    'Cláusula 4ª – Conclusões e Recomendações (ações para o próximo ciclo)',
+    'Cláusula 5ª – Metodologia e Fontes (rastreabilidade das informações)',
+    'Cláusula 6ª – Aprovação e Arquivamento (retenção mínima 5 anos)',
+  ],
+  nda: [
+    'Cláusula 1ª – Da Finalidade (uso permitido das informações)',
+    'Cláusula 2ª – Das Informações Confidenciais (definição e exceções)',
+    'Cláusula 3ª – Das Obrigações da Parte Receptora (sigilo, notificação em 24h)',
+    'Cláusula 4ª – Da Vigência (duração do NDA e prazo de confidencialidade pós-encerramento)',
+    'Cláusula 5ª – Das Penalidades (multa por violação, multiplicador reiteração, tutela urgência)',
+    'Cláusula 6ª – Da Propriedade Intelectual (sem transferência implícita)',
+    'Cláusula 7ª – Das Disposições Gerais (severabilidade, integralidade)',
+    'Cláusula 8ª – Do Foro (comarca competente)',
+  ],
+};
+
+// Padrões que indicam pergunta conversacional — não devem iniciar workflow
+const PADROES_CONVERSACIONAL = [
+  /\bcomo (funciona|usar?|faz|fazemos|devo|posso|fica|seria|e feito)\b/i,
+  /\bo que [eé]\b/i,
+  /\bpara que (serve|funciona)\b/i,
+  /\bme (explica|explique|fala|conta|diz|diga)\b/i,
+  /\bqual (a diferenca|e a diferenca|o objetivo|e o objetivo|a finalidade)\b/i,
+  /\bquais (sao|são|as (clausulas|vantagens|diferenca))\b/i,
+  /\bpreciso (saber|entender|de informacao)\b/i,
+  /\bnao (entendo|entendi|sei)\b/i,
+  /\btem algum (modelo|exemplo)\b/i,
+  /\bpode (me explicar|explicar)\b/i,
+  /\?/,  // qualquer mensagem com ponto de interrogação é pergunta
+];
+
+function isConversacional(msg: string): boolean {
+  const lower = msg.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  return PADROES_CONVERSACIONAL.some(p => p.test(lower));
+}
+
+function detectDocumentType(msg: string, strict = false): string | null {
+  const lower = msg.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+  // Modo strict: só detecta com intenção clara de criação (verbos imperativos ou pedidos diretos)
+  // Modo normal: detecta keywords mas ignora se a mensagem parece pergunta conversacional
+  if (!strict && isConversacional(msg)) return null;
+
+  // NDA — maior prioridade para evitar conflito com "contrato de confidencialidade"
+  if (/\b(nda|non.?disclosure|acordo de (sigilo|confidencialidade|nao.?divulgacao)|termo de (sigilo|confidencialidade))\b/.test(lower)) return 'nda';
+  // Confidencialidade/sigilo sozinhos só no modo strict
+  if (strict && /\b(confidencialidade|sigilo)\b/.test(lower)) return 'nda';
+
+  // Contrato — prestação de serviços ou contrato genérico
+  if (/\b(contrato|prestacao de servico|prestacao de servicos|contrato de servico|contrato de servicos|acordo de servico|formalizar|formalizacao)\b/.test(lower)) return 'contrato';
+
+  // Proposta comercial — só com contexto de criação ou termo composto
+  if (/\b(proposta comercial|oferta comercial|apresentar proposta|enviar proposta|fazer proposta|criar proposta|nova proposta|quero (uma |a )?proposta)\b/.test(lower)) return 'proposta_comercial';
+  if (strict && /\bproposta\b/.test(lower)) return 'proposta_comercial';
+
+  // Relatório final
+  if (/\b(relatorio final|relatorio de (desempenho|resultados|atividades|gestao)|prestacao de contas)\b/.test(lower)) return 'relatorio_final';
+  if (strict && /\brelatorio\b/.test(lower)) return 'relatorio_final';
+
+  // Orçamento
+  if (/\b(orcamento|budget|cotacao|precificacao|quanto custa|valor para|proposta de preco|preco de servico)\b/.test(lower)) return 'orcamento';
+
   return null;
 }
 
 const FIELD_LABELS: Record<string, string> = {
-  // contrato
-  contratante_empresa: 'Empresa', contratante_cnpj: 'CNPJ', contratante_endereco: 'Endereço',
-  contratante_cidade: 'Cidade', contratante_estado: 'Estado', contratante_cargo: 'Cargo',
-  contratante_nome: 'Representante', contratante_nacionalidade: 'Nacionalidade',
-  contratante_estado_civil: 'Estado civil', contratante_profissao: 'Profissão',
-  contratante_rg: 'RG', contratante_cpf: 'CPF',
-  contratado_empresa: 'Empresa', contratado_cnpj: 'CNPJ', contratado_endereco: 'Endereço',
-  contratado_cidade: 'Cidade', contratado_estado: 'Estado', contratado_cargo: 'Cargo',
-  contratado_nome: 'Representante', contratado_nacionalidade: 'Nacionalidade',
-  contratado_estado_civil: 'Estado civil', contratado_profissao: 'Profissão',
-  contratado_rg: 'RG', contratado_cpf: 'CPF',
-  objeto_servicos: 'Serviço', data_inicio: 'Início', data_fim: 'Fim',
-  valor_total: 'Valor total', forma_pagamento: 'Pagamento', dia_pagamento: 'Vencimento',
-  aviso_previo: 'Aviso prévio', foro_comarca: 'Foro', cidade_assinatura: 'Local',
-  data_assinatura: 'Data de assinatura',
-  // proposta comercial
-  emitente_empresa: 'Empresa emitente', emitente_cnpj: 'CNPJ', emitente_endereco: 'Endereço',
-  emitente_responsavel: 'Responsável', emitente_cargo: 'Cargo', emitente_email: 'E-mail',
-  emitente_telefone: 'Telefone', cliente_empresa: 'Cliente', cliente_cnpj: 'CNPJ do cliente',
-  cliente_responsavel: 'Contato', descricao_servicos: 'Serviços', escopo_detalhado: 'Escopo',
-  prazo_entrega: 'Prazo', validade_proposta: 'Validade', cidade_emissao: 'Cidade', data_emissao: 'Data',
-  // orçamento
-  empresa_emitente: 'Empresa', cnpj_emitente: 'CNPJ', responsavel_emitente: 'Responsável',
-  telefone_emitente: 'Telefone', cliente_nome: 'Cliente', cliente_cnpj_cpf: 'CNPJ/CPF',
-  descricao_itens: 'Itens', quantidade_unidade: 'Qtd/Unidade', valor_unitario: 'Valor unitário',
-  prazo_execucao: 'Prazo', validade_orcamento: 'Validade',
-  // relatório
-  empresa: 'Empresa', cnpj: 'CNPJ', responsavel: 'Responsável', cargo_responsavel: 'Cargo',
-  titulo_relatorio: 'Título', resumo_executivo: 'Resumo', principais_resultados: 'Resultados',
+  // ── Contrato ──
+  contratante_empresa: 'Empresa Contratante', contratante_cnpj: 'CNPJ da Contratante',
+  contratante_endereco: 'Endereço da Contratante', contratante_cidade: 'Cidade da Contratante',
+  contratante_estado: 'Estado da Contratante', contratante_cargo: 'Cargo do Representante',
+  contratante_nome: 'Representante Legal', contratante_nacionalidade: 'Nacionalidade',
+  contratante_estado_civil: 'Estado Civil', contratante_profissao: 'Profissão',
+  contratante_rg: 'RG do Representante', contratante_cpf: 'CPF do Representante',
+  contratado_empresa: 'Empresa Contratada', contratado_cnpj: 'CNPJ da Contratada',
+  contratado_endereco: 'Endereço da Contratada', contratado_cidade: 'Cidade da Contratada',
+  contratado_estado: 'Estado da Contratada', contratado_cargo: 'Cargo do Representante',
+  contratado_nome: 'Representante Legal', contratado_nacionalidade: 'Nacionalidade',
+  contratado_estado_civil: 'Estado Civil', contratado_profissao: 'Profissão',
+  contratado_rg: 'RG do Representante', contratado_cpf: 'CPF do Representante',
+  objeto_servicos: 'Objeto do Contrato', data_inicio: 'Data de Início', data_fim: 'Data de Término',
+  valor_total: 'Valor Total do Contrato', forma_pagamento: 'Forma de Pagamento',
+  dia_pagamento: 'Dia de Vencimento', aviso_previo: 'Aviso Prévio (dias)',
+  foro_comarca: 'Foro Judicial', cidade_assinatura: 'Cidade de Assinatura',
+  data_assinatura: 'Data de Assinatura',
+  // ── Proposta Comercial ──
+  emitente_empresa: 'Empresa Emitente', emitente_cnpj: 'CNPJ do Emitente',
+  emitente_endereco: 'Endereço do Emitente', emitente_responsavel: 'Responsável pela Proposta',
+  emitente_cargo: 'Cargo', emitente_email: 'E-mail de Contato', emitente_telefone: 'Telefone',
+  cliente_empresa: 'Empresa Cliente', cliente_cnpj: 'CNPJ do Cliente',
+  cliente_responsavel: 'Responsável no Cliente',
+  descricao_servicos: 'Descrição dos Serviços', escopo_detalhado: 'Escopo Detalhado',
+  valor_total_proposta: 'Valor Total da Proposta',
+  prazo_entrega: 'Prazo de Entrega', validade_proposta: 'Validade da Proposta (dias)',
+  cidade_emissao: 'Cidade de Emissão', data_emissao: 'Data de Emissão',
+  // ── Orçamento ──
+  empresa_emitente: 'Empresa Emissora', cnpj_emitente: 'CNPJ do Emitente',
+  responsavel_emitente: 'Responsável pela Emissão', telefone_emitente: 'Telefone de Contato',
+  cliente_nome: 'Solicitante', cliente_cnpj_cpf: 'CNPJ/CPF do Solicitante',
+  descricao_itens: 'Descrição dos Itens', quantidade_unidade: 'Quantidade/Unidade',
+  valor_unitario: 'Valor Unitário', valor_total_orcamento: 'Valor Total do Orçamento',
+  prazo_execucao: 'Prazo de Execução', validade_orcamento: 'Validade do Orçamento (dias)',
+  // ── Relatório Final ──
+  empresa: 'Empresa', cnpj: 'CNPJ da Empresa', responsavel: 'Responsável pelo Relatório',
+  cargo_responsavel: 'Cargo do Responsável', titulo_relatorio: 'Título do Relatório',
+  resumo_executivo: 'Resumo Executivo', principais_resultados: 'Principais Resultados',
   recomendacoes: 'Recomendações',
-  // nda
-  divulgadora_empresa: 'Divulgadora', divulgadora_cnpj: 'CNPJ', divulgadora_endereco: 'Endereço',
-  divulgadora_representante: 'Representante', divulgadora_cargo: 'Cargo', divulgadora_cpf: 'CPF',
-  receptora_empresa: 'Receptora', receptora_cnpj: 'CNPJ', receptora_endereco: 'Endereço',
-  receptora_representante: 'Representante', receptora_cargo: 'Cargo', receptora_cpf: 'CPF',
-  finalidade_nda: 'Finalidade', descricao_informacoes: 'Informações protegidas',
-  prazo_confidencialidade: 'Prazo de sigilo', vigencia_meses: 'Vigência',
-  penalidade_valor: 'Multa por violação',
-  // genéricos legados
-  valor: 'Valor', prazo: 'Prazo', dataInicio: 'Início', dataFim: 'Fim',
+  // ── NDA ──
+  divulgadora_empresa: 'Empresa Divulgadora', divulgadora_cnpj: 'CNPJ da Divulgadora',
+  divulgadora_endereco: 'Endereço da Divulgadora', divulgadora_representante: 'Representante da Divulgadora',
+  divulgadora_cargo: 'Cargo', divulgadora_cpf: 'CPF do Representante',
+  receptora_empresa: 'Empresa Receptora', receptora_cnpj: 'CNPJ da Receptora',
+  receptora_endereco: 'Endereço da Receptora', receptora_representante: 'Representante da Receptora',
+  receptora_cargo: 'Cargo', receptora_cpf: 'CPF do Representante',
+  finalidade_nda: 'Finalidade do NDA', descricao_informacoes: 'Informações Confidenciais Protegidas',
+  prazo_confidencialidade: 'Prazo de Sigilo (anos)', vigencia_meses: 'Vigência do NDA (meses)',
+  penalidade_valor: 'Multa por Violação',
+  // ── Genéricos ──
+  valor: 'Valor', prazo: 'Prazo',
+  dataInicio: 'Início', dataFim: 'Fim',
 };
 
 const GROUP_ICONS: Record<string, string> = {
@@ -282,24 +434,64 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     logTurn({ userId, conversationId: state.conversationId!, turnNumber, userMessage: userMsg, aiResponse: aiResp, groupId, extractedFields: extracted, savedFields: saved });
   };
 
-  // ── NOVO DOCUMENTO — usuário pede tipo de doc com workflow já ativo/completo ──
-  if (state.workflowName && intent !== 'CANCEL' && intent !== 'HELP') {
-    const novoTipo = detectDocumentType(message);
-    if (novoTipo) {
+  // ── CONFIRMAÇÃO DE TROCA DE DOCUMENTO ────────────────────────
+  // Usuário confirmou (ou cancelou) a troca de workflow proposta no turno anterior
+  if (state.pendingDocumentSwitch) {
+    const novoTipo = state.pendingDocumentSwitch;
+    const lower = norm(message);
+    const confirmou = /^(sim|s|ok|pode|vai|quero|confirma|isso|claro|com certeza|vamos|tudo bem|beleza)\b/i.test(lower)
+      || /\b(confirmar?|trocar?|mudar?|sim (pode|pode ser|quero))\b/i.test(lower);
+    const cancelou = /^(nao|n|cancelar?|volta|manter|continuar|nao quero|deixa pra la)\b/i.test(lower);
+
+    if (confirmou) {
+      // Confirma troca: inicia novo workflow em nova conversa
+      const convIdAtual = state.conversationId;
+      if (convIdAtual) completeConversation(convIdAtual, state.data);
       await deleteState(userId);
       state = await initWorkflow(userId, novoTipo);
       const newConvId = await ensureConversation(userId, novoTipo);
-      state = { ...state, conversationId: newConvId, turnNumber: 0 };
+      state = { ...state, conversationId: newConvId, turnNumber: 0, pendingDocumentSwitch: null };
       await setState(userId, state);
-      const grupLabel = getCurrentGroup(state)?.label ?? '';
-      const nomeTipo  = novoTipo.replace(/_/g, ' ');
+      const grupLabel  = getCurrentGroup(state)?.label ?? '';
+      const totalGrupos = workflows[novoTipo]?.fieldGroups.length ?? 0;
+      const nomeTipo   = novoTipo.replace(/_/g, ' ');
       const texto = await resposta(
-        { situacao: 'inicio_workflow', tipoDocumento: nomeTipo, grupAtual: grupLabel },
-        `📄 Ótimo! Vamos criar o seu **${nomeTipo}**.\n\n${getCurrentGroupQuestion(state)}`,
+        { situacao: 'inicio_workflow', tipoDocumento: nomeTipo, grupAtual: grupLabel, totalGrupos },
+        `Iniciando coleta de dados para o seu documento. Serão **${totalGrupos} etapas** no total.\n\n${getCurrentGroupQuestion(state)}`,
         state
       );
       logTurn({ userId, conversationId: state.conversationId!, turnNumber: 1, userMessage: message, aiResponse: texto });
       return res.json(buildResponse(texto, state));
+    } else if (cancelou) {
+      // Cancela troca: limpa o pending e retoma o workflow atual
+      state = { ...state, pendingDocumentSwitch: null };
+      await setState(userId, state);
+      const textoMantem = 'Tudo bem, continuamos com o documento atual.\n\n' + (getCurrentGroupQuestion(state) ?? '');
+      logAndAdvanceTurn(message, textoMantem);
+      return res.json(buildResponse(textoMantem, state));
+    }
+    // Resposta ambígua: repergunta
+    state = { ...state, pendingDocumentSwitch: novoTipo };
+    await setState(userId, state);
+    const nomeAtual = state.workflowName?.replace(/_/g, ' ') ?? 'documento atual';
+    const nomeNovo  = novoTipo.replace(/_/g, ' ');
+    const textoAmbig = `Para confirmar: você deseja **interromper** o ${nomeAtual} e iniciar um novo **${nomeNovo}**?\n\nResponda **sim** para trocar ou **não** para continuar o documento atual.`;
+    logAndAdvanceTurn(message, textoAmbig);
+    return res.json(buildResponse(textoAmbig, state));
+  }
+
+  // ── NOVO DOCUMENTO — usuário pede tipo de doc com workflow já ativo/completo ──
+  if (state.workflowName && intent !== 'CANCEL' && intent !== 'HELP') {
+    const novoTipo = detectDocumentType(message);
+    if (novoTipo && novoTipo !== state.workflowName) {
+      // Propõe troca em vez de trocar imediatamente — evita reset acidental
+      const nomeAtual = state.workflowName.replace(/_/g, ' ');
+      const nomeNovo  = novoTipo.replace(/_/g, ' ');
+      state = { ...state, pendingDocumentSwitch: novoTipo };
+      await setState(userId, state);
+      const textoConfirm = `Você tem um **${nomeAtual}** em andamento.\n\nDeseja **interromper** e iniciar um novo **${nomeNovo}**? Os dados já coletados serão perdidos.\n\nResponda **sim** para trocar ou **não** para continuar.`;
+      logAndAdvanceTurn(message, textoConfirm);
+      return res.json(buildResponse(textoConfirm, state));
     }
   }
 
@@ -307,7 +499,7 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
   if (intent === 'CANCEL') {
     const textoCancel = await resposta(
       { situacao: 'cancelado' },
-      '🔄 Conversa reiniciada. Que tipo de documento você precisa criar?\n\n**contrato** · **proposta** · **orçamento** · **relatório** · **NDA**',
+      'Conversa reiniciada. Qual documento você precisa criar?\n\n• **Contrato** de Prestação de Serviços\n• **Proposta** Comercial\n• **Orçamento**\n• **Relatório** Final\n• **Acordo de Confidencialidade** (NDA)',
       state
     );
     logAndAdvanceTurn(message, textoCancel);
@@ -320,12 +512,14 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
   if (intent === 'HELP') {
     const textoHelp = await resposta(
       { situacao: 'ajuda' },
-      '📘 **Como usar a BepeAI:**\n\n' +
-      '• Diga o tipo de documento que deseja criar\n' +
-      '• Responda às perguntas — pode fornecer vários dados de uma vez\n' +
-      '• Use **"corrigir [campo]"** para alterar um dado já preenchido\n' +
-      '• **"cancelar"** para recomeçar do zero\n' +
-      '• Quando tudo estiver pronto, clique em **Gerar PDF**',
+      '**Como usar a BepeAI:**\n\n' +
+      '1. Diga o tipo de documento que deseja criar (contrato, proposta, orçamento, relatório ou NDA)\n' +
+      '2. Responda às perguntas — pode fornecer vários dados de uma vez na mesma mensagem\n' +
+      '3. Os dados são aceitos com ou sem formatação (CNPJ, CPF, datas em qualquer formato)\n' +
+      '4. Para corrigir: diga **"corrigir [campo]"** — ex: "corrigir empresa" ou "alterar cnpj"\n' +
+      '5. Para recomeçar do zero: diga **"cancelar"**\n' +
+      '6. Para tirar dúvidas sobre campos ou cláusulas, pergunte a qualquer momento\n' +
+      '7. Ao terminar, clique em **Gerar PDF** ou diga "gerar"',
       state
     );
     logAndAdvanceTurn(message, textoHelp);
@@ -336,18 +530,20 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
   if (intent === 'QUERY_DATA') {
     const resumo = buildResumoFormatado(state);
     if (!resumo) {
-      const textoEmpty = 'Ainda não coletei nenhum dado. Diga qual documento precisa criar para começarmos.';
+      const textoEmpty = 'Nenhum dado coletado ainda. Para iniciar, informe o tipo de documento desejado: **contrato**, **proposta**, **orçamento**, **relatório** ou **NDA**.';
       logAndAdvanceTurn(message, textoEmpty);
       return res.json(buildResponse(textoEmpty, state));
     }
     const completedCount = state.completedFields.length;
     const totalCount = state.workflowName ? (workflows[state.workflowName]?.steps.length ?? 0) : 0;
+    const progress = state.workflowName ? getProgressInfo(state) : null;
+    const etapa = progress ? ` (etapa ${(progress as { currentGroup: number }).currentGroup + 1} de ${(progress as { totalGroups: number }).totalGroups})` : '';
     const statusLine = isComplete
-      ? '✅ **Coleta concluída** — documento pronto para gerar.'
-      : `📋 **Progresso:** ${completedCount}/${totalCount} campos coletados.`;
+      ? '**Coleta concluída** — documento pronto para geração.'
+      : `**Progresso:** ${completedCount} de ${totalCount} campos coletados${etapa}.`;
 
     const textoQuery = `${statusLine}\n\n${resumo}${isComplete
-      ? '\n\nClique em **Gerar PDF** para baixar o documento.'
+      ? '\n\nClique em **Gerar PDF** para baixar o documento ou diga "gerar".'
       : `\n\n${getCurrentGroupQuestion(state) ?? ''}`}`;
 
     logAndAdvanceTurn(message, textoQuery);
@@ -358,7 +554,7 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
   if (isComplete && intent === 'CONFIRM') {
     const textoConfirm = await resposta(
       { situacao: 'confirmado' },
-      '✅ Perfeito! Clique em **Gerar PDF** abaixo para baixar seu documento.',
+      'Documento finalizado. Clique em **Gerar PDF** para baixar o arquivo.',
       state
     );
     logAndAdvanceTurn(message, textoConfirm);
@@ -367,65 +563,97 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
 
   // ── EDIT_FIELD ────────────────────────────────────────────
   if (intent === 'EDIT_FIELD') {
+    const workflowDef = state.workflowName ? workflows[state.workflowName] : null;
+
+    // Sem workflow ativo não há o que editar
+    if (!workflowDef) {
+      const textoSemWorkflow = 'Nenhum documento em elaboração. Informe qual documento deseja criar para iniciar.';
+      logAndAdvanceTurn(message, textoSemWorkflow);
+      return res.json(buildResponse(textoSemWorkflow, state));
+    }
+
     const fieldHint = extractFieldToEdit(message);
+
     if (!fieldHint) {
+      // Monta lista dos campos já coletados para orientar o usuário
+      const camposColetados = workflowDef.steps
+        .filter(s => s.field in state.data)
+        .map(s => `• **${FIELD_LABELS[s.field] ?? s.field.replace(/_/g, ' ')}**`)
+        .slice(0, 8)
+        .join('\n');
+
       const textoNoField = await resposta(
         { situacao: 'campo_nao_encontrado', campoCorrendo: message },
-        '🤔 Não identifiquei qual campo corrigir. Diga por exemplo:\n"corrigir empresa" ou "alterar data_inicio"',
+        `Não identifiquei qual campo corrigir.\n\nCampos disponíveis para correção:\n${camposColetados || '(nenhum coletado ainda)'}\n\nDiga, por exemplo: "corrigir empresa" ou "alterar cnpj".`,
         state
       );
       logAndAdvanceTurn(message, textoNoField);
       return res.json(buildResponse(textoNoField, state));
     }
 
-    const workflowDef = workflows[state.workflowName!];
-    const step = workflowDef?.steps.find(s =>
-      s.field === fieldHint ||
-      s.field.endsWith('_' + fieldHint) ||
-      s.field.startsWith(fieldHint + '_')
-    );
+    const step = findStepByHint(fieldHint, workflowDef);
 
     if (!step) {
+      // Lista os campos coletados para orientar
+      const camposDisponiveis = workflowDef.steps
+        .filter(s => s.field in state.data)
+        .map(s => `• ${FIELD_LABELS[s.field] ?? s.field.replace(/_/g, ' ')}`)
+        .slice(0, 8)
+        .join('\n');
+
       const textoNotFound = await resposta(
         { situacao: 'campo_nao_encontrado', campoCorrendo: fieldHint },
-        `❌ Campo **"${fieldHint}"** não encontrado. Use "corrigir" seguido do nome do campo, ex: "corrigir empresa".`,
+        `Não encontrei o campo **"${fieldHint}"** neste documento.\n\nCampos que podem ser corrigidos:\n${camposDisponiveis || '(nenhum preenchido ainda)'}\n\nTente: "corrigir empresa", "corrigir cnpj", "corrigir endereço".`,
         state
       );
       logAndAdvanceTurn(message, textoNotFound);
       return res.json(buildResponse(textoNotFound, state));
     }
 
+    // Captura o valor atual antes do rollback para mostrar no feedback
+    const valorAnterior = state.data[step.field] ?? null;
+
     const newState = await rollback(userId, step.field);
     if (!newState) {
-      const textoErr = `❌ Não foi possível corrigir "${step.field}". Tente novamente.`;
+      const textoErr = `Não foi possível iniciar a correção de "${step.field}". Tente novamente.`;
       logAndAdvanceTurn(message, textoErr);
       return res.json(buildResponse(textoErr, state));
     }
 
     state = { ...newState, conversationId: state.conversationId, turnNumber };
     await setState(userId, state);
+
     const fieldLabel = FIELD_LABELS[step.field] ?? step.field.replace(/_/g, ' ');
     const grupLabel  = getCurrentGroup(state)?.label ?? '';
-    const textoEdit = await resposta(
-      { situacao: 'editando_campo', campoCorrendo: fieldLabel, grupAtual: grupLabel },
-      `✏️ Vamos corrigir **${fieldLabel}**.\n\n${getCurrentGroupQuestion(state)}`,
-      state
-    );
+
+    // Prompt de edição com o valor anterior visível
+    const contextoEdicao: RespostaConversacionalInput = {
+      situacao:      'editando_campo',
+      campoCorrendo: fieldLabel,
+      grupAtual:     grupLabel,
+      nextQuestion:  getCurrentGroupQuestion(state) ?? undefined,
+      // Injeta valor anterior como dado de contexto para o LLM referenciar
+      dadosDocumento: valorAnterior
+        ? { ...state.data, [`${step.field}_anterior`]: valorAnterior }
+        : state.data,
+    };
+
+    const fallbackEdicao = valorAnterior
+      ? `Correção de **${fieldLabel}** iniciada.\nValor atual: **${formatarValorResumo(step.field, valorAnterior)}**\n\nInforme o novo valor:`
+      : `Correção de **${fieldLabel}** iniciada.\n\n${getCurrentGroupQuestion(state)}`;
+
+    const textoEdit = await resposta(contextoEdicao, fallbackEdicao, state);
     logTurn({ userId, conversationId: state.conversationId!, turnNumber, userMessage: message, aiResponse: textoEdit });
     return res.json(buildResponse(textoEdit, state));
   }
 
-  // ── WORKFLOW COMPLETO — pergunta livre sobre o documento ─────
-  // Quando o usuário faz qualquer pergunta após completar, a IA responde
-  // com base nos dados coletados e no histórico recente.
+  // ── WORKFLOW COMPLETO — chat consultivo sobre o documento ────
   if (isComplete) {
-    // Busca os últimos turns para dar contexto multi-turn à IA
     let historicoRecente: Array<{ role: 'user' | 'assistant'; content: string }> = [];
     if (state.conversationId) {
       try {
         const detail = await getConversationDetail(state.conversationId, userId);
         if (detail?.turns) {
-          // Pega os últimos 6 turns (3 pares user/ai) para contexto
           const ultimos = detail.turns.slice(-6);
           historicoRecente = ultimos.flatMap(t => [
             { role: 'user' as const,      content: t.userMessage },
@@ -435,15 +663,20 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
       } catch { /* histórico opcional */ }
     }
 
+    const clausulas = state.workflowName
+      ? (CLAUSULAS_DOCUMENTO[state.workflowName] ?? [])
+      : [];
+
     const textoLivre = await resposta(
       {
         situacao: 'chat_livre',
-        tipoDocumento:   state.workflowName ?? undefined,
-        dadosDocumento:  state.data,
-        mensagemUsuario: message,
+        tipoDocumento:      state.workflowName ?? undefined,
+        dadosDocumento:     state.data,
+        mensagemUsuario:    message,
         historicoRecente,
+        clausulasDocumento: clausulas,
       },
-      `O documento está pronto. Se tiver dúvidas sobre os dados coletados, é só perguntar. Para gerar o PDF, clique no botão abaixo ou diga **"gerar PDF"**.`
+      'O documento está pronto para geração. Para tirar dúvidas sobre os dados coletados, pergunte livremente. Para gerar o PDF, clique no botão abaixo ou diga "gerar".'
     );
     logAndAdvanceTurn(message, textoLivre);
     return res.json(buildResponse(textoLivre, state, true, { readyToDownload: true }));
@@ -454,7 +687,7 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     if (isSaudacao(message)) {
       const textoSaudacao = await resposta(
         { situacao: 'boas_vindas' },
-        '👋 Olá! Sou a **BepeAI**, sua assistente de automação documental.\n\nPosso criar:\n• **Contrato** de Prestação de Serviços\n• **Proposta** Comercial\n• **Orçamento**\n• **Relatório** Final\n• **NDA** — Acordo de Confidencialidade\n\nQual documento você precisa?',
+        'Bem-vindo à **BepeAI** — automação de documentos jurídicos.\n\nPosso criar:\n• **Contrato** de Prestação de Serviços\n• **Proposta** Comercial\n• **Orçamento**\n• **Relatório** Final\n• **Acordo de Confidencialidade** (NDA)\n\nQual documento você precisa hoje?',
         state
       );
       logAndAdvanceTurn(message, textoSaudacao);
@@ -463,31 +696,29 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
 
     const tipo = detectDocumentType(message);
     if (tipo) {
-      // Reutiliza o conversationId já criado acima, atualizando o workflow_type
       const existingConvId = state.conversationId;
       state = await initWorkflow(userId, tipo);
       const updatedConvId = await ensureConversation(userId, tipo, existingConvId ?? undefined);
       state = { ...state, conversationId: updatedConvId, turnNumber: 0 };
       await setState(userId, state);
-      const grupLabel = getCurrentGroup(state)?.label ?? '';
-      const nomeTipo  = tipo.replace(/_/g, ' ');
+      const grupLabel  = getCurrentGroup(state)?.label ?? '';
+      const totalGrupos = workflows[tipo]?.fieldGroups.length ?? 0;
       const textoInit = await resposta(
-        { situacao: 'inicio_workflow', tipoDocumento: nomeTipo, grupAtual: grupLabel },
-        `📄 Ótimo! Vamos criar o seu **${nomeTipo}**.\n\n${getCurrentGroupQuestion(state)}`,
+        { situacao: 'inicio_workflow', tipoDocumento: tipo, grupAtual: grupLabel, totalGrupos },
+        `Iniciando coleta de dados para o seu documento. Serão **${totalGrupos} etapas** no total.\n\n${getCurrentGroupQuestion(state)}`,
         state
       );
       logTurn({ userId, conversationId: state.conversationId!, turnNumber: 1, userMessage: message, aiResponse: textoInit });
       return res.json(buildResponse(textoInit, state));
     }
 
-    // Pergunta livre sem workflow — responde como assistente e guia para criar documento
     const textoDefault = await resposta(
       {
         situacao: 'chat_livre',
         mensagemUsuario: message,
         dadosDocumento: {},
       },
-      'Posso te ajudar a criar documentos profissionais.\n\nDiga qual precisa:\n**contrato** · **proposta** · **orçamento** · **relatório** · **NDA**'
+      'Posso ajudar com documentos jurídicos profissionais. Informe o tipo desejado:\n\n• **contrato** — Prestação de Serviços\n• **proposta** — Comercial\n• **orçamento**\n• **relatório** — Final\n• **NDA** — Acordo de Confidencialidade'
     );
     logAndAdvanceTurn(message, textoDefault);
     return res.json(buildResponse(textoDefault, state));
@@ -497,7 +728,7 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
   const currentGroup = getCurrentGroup(state);
   if (!currentGroup) {
     await deleteState(userId);
-    return res.json(buildResponse('⚠️ Erro de estado interno. Vamos recomeçar.', await getState(userId)));
+    return res.json(buildResponse('Erro de estado interno detectado. A conversa foi reiniciada.', await getState(userId)));
   }
 
   const workflowDef = workflows[state.workflowName!];
@@ -542,19 +773,43 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     /\bposso pular\b/i,
     /\bé obrigatório\b/i,
     /\bnão sei o (que|qual)\b/i,
-    /\bme explica\b/i,
-    /\bme explique\b/i,
-    /\bqual a diferença\b/i,
-    /\bcomo (preencher|colocar|informar|escrever)\b/i,
+    /\bme (explica|explique|conta|fala sobre)\b/i,
+    /\bqual (a diferença|o objetivo|a finalidade)\b/i,
+    /\bcomo (preencher|colocar|informar|escrever|funciona|funciona o)\b/i,
     /\bo que significa\b/i,
     /\bsignificado\b/i,
     /\bcomo assim\b/i,
-    /\bnão entendo\b/i,
-    /\bnão entendi\b/i,
+    /\bnão (entendo|entendi)\b/i,
+    /\bsim, mas\b/i,  // "sim, mas como funciona..." — concorda mas quer explicação
     /^\s*\?+\s*$/,
   ];
   const isPerguntaCampo = savedFields.length === 0 && invalidFields.length === 0
-    && PADROES_PERGUNTA_CAMPO.some(p => p.test(message));
+    && (isConversacional(message) || PADROES_PERGUNTA_CAMPO.some(p => p.test(message)));
+
+  // ── Detecta hesitação / não saber o valor ─────────────────
+  const PADROES_HESITACAO = [
+    /\bnão sei\b/i, /\bnao sei\b/i,
+    /\bnão tenho (certeza|ideia)\b/i, /\bqualquer (um|valor|data)\b/i,
+    /\bpode ser qualquer\b/i, /\buse o padrão\b/i,
+    /\buse o padrao\b/i, /\bpadrão de mercado\b/i,
+    /\bsugira\b/i, /\bvocê decide\b/i, /\bvoce decide\b/i,
+    /\bcoloca o normal\b/i, /\bcoloca o padrão\b/i,
+  ];
+  // Campos que têm valor padrão de mercado
+  const CAMPOS_COM_PADRAO: Record<string, string> = {
+    aviso_previo:            '30',
+    validade_proposta:       '30',
+    validade_orcamento:      '15',
+    vigencia_meses:          '12',
+    prazo_confidencialidade: '3',
+    dia_pagamento:           '10',
+  };
+  const pendingFieldNames = state.pendingFieldsInCurrentGroup;
+  const campoPendentePadrao = pendingFieldNames.find(f => f in CAMPOS_COM_PADRAO);
+  const isHesitacao = savedFields.length === 0 && invalidFields.length === 0
+    && !isPerguntaCampo
+    && PADROES_HESITACAO.some(p => p.test(message))
+    && !!campoPendentePadrao;
 
   // ── Determina situação para gerar resposta ─────────────────
   let situacao: RespostaConversacionalInput['situacao'];
@@ -564,6 +819,8 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     situacao = 'campos_invalidos';
   } else if (isPerguntaCampo) {
     situacao = 'explicar_campo';
+  } else if (isHesitacao) {
+    situacao = 'sugerir_padrao';
   } else {
     situacao = 'sem_extracao';
   }
@@ -572,17 +829,25 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
   let fallback = '';
   if (situacao === 'campos_salvos') {
     fallback = savedLabels.length === currentGroup.fields.length && invalidFields.length === 0
-      ? `✅ **${currentGroup.label}** registrado.\n\n${getCurrentGroupQuestion(state) ?? ''}`
-      : `✅ Recebi: **${savedLabels.join(', ')}**.\n\n${getCurrentGroupQuestion(state) ?? ''}`;
+      ? `**${currentGroup.label}** registrado.\n\n${getCurrentGroupQuestion(state) ?? ''}`
+      : `Recebi: **${savedLabels.join(', ')}**.\n\n${getCurrentGroupQuestion(state) ?? ''}`;
   } else if (situacao === 'campos_invalidos') {
-    fallback = `⚠️ Atenção com o formato:\n${invalidLabels.map(e => `• ${e}`).join('\n')}\n\n${getCurrentGroupQuestion(state) ?? ''}`;
+    fallback = `Atenção com o formato:\n${invalidLabels.map(e => `• ${e}`).join('\n')}\n\n${getCurrentGroupQuestion(state) ?? ''}`;
   } else if (situacao === 'explicar_campo') {
     fallback = `Para tirar dúvidas sobre este campo, veja as instruções abaixo.\n\n${getCurrentGroupQuestion(state) ?? 'Por favor, forneça as informações solicitadas.'}`;
+  } else if (situacao === 'sugerir_padrao') {
+    const fieldPadrao = campoPendentePadrao ?? '';
+    const labelPadrao = FIELD_LABELS[fieldPadrao] ?? fieldPadrao.replace(/_/g, ' ');
+    const valorPadrao = CAMPOS_COM_PADRAO[fieldPadrao] ?? '';
+    fallback = `**${labelPadrao}**: o padrão de mercado é **${valorPadrao}**. Posso usar esse valor?`;
   } else {
-    fallback = `🤔 Não consegui identificar as informações. ${getCurrentGroupQuestion(state) ?? 'Por favor, forneça as informações solicitadas.'}`;
+    fallback = `Não consegui identificar as informações solicitadas. ${getCurrentGroupQuestion(state) ?? 'Por favor, forneça os dados pedidos.'}`;
   }
 
   const nextQuestion = getCurrentGroupQuestion(state) ?? undefined;
+  const fieldPadraoLabel = campoPendentePadrao
+    ? (FIELD_LABELS[campoPendentePadrao] ?? campoPendentePadrao.replace(/_/g, ' '))
+    : undefined;
 
   const textoResposta = await resposta(
     {
@@ -592,8 +857,10 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
       camposInvalidos: invalidLabels,
       camposFaltando:  missingLabels,
       grupAtual:       proximoGrupLabel,
+      totalGrupos:     workflows[state.workflowName!]?.fieldGroups.length,
       nextQuestion,
       mensagemUsuario: message,
+      campoCorrendo:   fieldPadraoLabel,
     },
     fallback,
     state

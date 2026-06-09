@@ -229,7 +229,7 @@ export function ChatMessage({ message, onDownloadPDF }: ChatMessageProps) {
                   ? <><Loader2 size={13} style={{ animation: 'spin 0.7s linear infinite' }} /> Gerando PDF...</>
                   : pdfError
                     ? <><AlertCircle size={13} /> Erro — Tentar novamente <RotateCcw size={11} /></>
-                    : <><FileText size={13} /> Baixar PDF do documento</>
+                    : <><FileText size={13} /> Gerar PDF</>
                 }
               </button>
             </div>

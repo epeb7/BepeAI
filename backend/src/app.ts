@@ -49,15 +49,32 @@ app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
 // ── Security headers ─────────────────────────────────────────
+const isProd = env.NODE_ENV === 'production';
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", 'data:'],
+      defaultSrc:  ["'self'"],
+      scriptSrc:   ["'self'"],
+      // unsafe-inline necessário apenas para Tailwind/inline styles em dev
+      // em produção remove-se para máxima proteção XSS
+      styleSrc:    isProd ? ["'self'"] : ["'self'", "'unsafe-inline'"],
+      imgSrc:      ["'self'", 'data:', 'blob:'],
+      connectSrc:  ["'self'", 'https://api.groq.com', 'https://*.supabase.co'],
+      fontSrc:     ["'self'", 'data:'],
+      objectSrc:   ["'none'"],
+      frameSrc:    ["'none'"],
+      baseUri:     ["'self'"],
+      formAction:  ["'self'"],
     },
   },
+  // HSTS: força HTTPS por 1 ano (só ativo em produção com HTTPS real)
+  hsts: isProd
+    ? { maxAge: 31536000, includeSubDomains: true, preload: true }
+    : false,
+  frameguard:       { action: 'deny' },          // X-Frame-Options: DENY
+  noSniff:          true,                         // X-Content-Type-Options: nosniff
+  referrerPolicy:   { policy: 'strict-origin-when-cross-origin' },
+  crossOriginEmbedderPolicy: false,               // não bloqueia carregamento de PDFs
 }));
 
 // ── CORS — suporta múltiplas origens ─────────────────────────
@@ -90,8 +107,12 @@ app.use('/api', globalLimiter);
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // ── Health check ─────────────────────────────────────────────
+// Em produção retorna apenas { status: 'ok' } — sem expor versão, env ou estado interno
 app.get('/health', (_req, res) => {
-  res.status(200).json({
+  if (env.NODE_ENV === 'production') {
+    return res.status(200).json({ status: 'ok' });
+  }
+  return res.status(200).json({
     status: 'ok',
     service: 'BepeAI Backend',
     version: process.env.npm_package_version ?? '1.0.0',
@@ -103,8 +124,6 @@ app.get('/health', (_req, res) => {
     },
   });
 });
-
-// Alias público sem auth
 app.get('/api/health', (_req, res) => res.redirect('/health'));
 
 // ── Rotas ─────────────────────────────────────────────────────

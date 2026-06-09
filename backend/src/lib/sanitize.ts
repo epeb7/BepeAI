@@ -3,7 +3,7 @@
  * Previne prompt injection e outros vetores de ataque.
  */
 
-const MAX_INPUT_LENGTH = 500;
+const MAX_INPUT_LENGTH = 1500;
 
 const INJECTION_PATTERNS: RegExp[] = [
   /\b(sistema|system)\s*:/gi,

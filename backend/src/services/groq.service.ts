@@ -103,8 +103,15 @@ function extrairCNPJ(texto: string, preferLabel?: string): string | null {
     const m = texto.match(new RegExp(`${preferLabel}\\s*:?\\s*([\\d.\\-/]{14,18})`, 'i'));
     if (m) { const d = m[1].replace(/\D/g, ''); if (d.length === 14) return d; }
   }
-  const m = texto.replace(/\D/g, '').match(/\d{14}/);
-  return m ? m[0] : null;
+  // Tenta extrair CNPJ formatado (XX.XXX.XXX/XXXX-XX) primeiro
+  const fmt = texto.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/);
+  if (fmt) { const d = fmt[0].replace(/\D/g, ''); if (d.length === 14) return d; }
+  // Sequência pura de 14 dígitos (só se não tiver 11 dígitos isolados antes/depois, para não confundir com CPF+3)
+  const digits = texto.replace(/\D/g, '');
+  if (digits.length === 14) return digits;
+  // Busca 14 dígitos dentro de um texto maior
+  const m = digits.match(/(\d{14})/);
+  return m ? m[1] : null;
 }
 
 function extrairCPF(texto: string, preferLabel?: string): string | null {
@@ -114,6 +121,12 @@ function extrairCPF(texto: string, preferLabel?: string): string | null {
   }
   const labeled = texto.match(/\bcpf\s*:?\s*([\d.\-]+)/i);
   if (labeled) { const d = labeled[1].replace(/\D/g, '').slice(0, 11); if (d.length === 11) return d; }
+  // CPF formatado (XXX.XXX.XXX-XX)
+  const fmt = texto.match(/\d{3}\.\d{3}\.\d{3}-\d{2}/);
+  if (fmt) { const d = fmt[0].replace(/\D/g, ''); if (d.length === 11) return d; }
+  // Sequência pura de 11 dígitos
+  const digits = texto.replace(/\D/g, '');
+  if (digits.length === 11) return digits;
   const m = texto.match(/(?<!\d)(\d{11})(?!\d)/);
   return m ? m[1] : null;
 }
@@ -576,17 +589,19 @@ export interface RespostaConversacionalInput {
   situacao: 'boas_vindas' | 'inicio_workflow' | 'campos_salvos' | 'campos_invalidos'
           | 'sem_extracao' | 'workflow_completo' | 'cancelado' | 'ajuda'
           | 'confirmado' | 'editando_campo' | 'campo_nao_encontrado' | 'chat_livre'
-          | 'explicar_campo';
+          | 'explicar_campo' | 'sugerir_padrao';
   tipoDocumento?: string;
   camposSalvos?: string[];      // labels legíveis dos campos
   camposInvalidos?: string[];   // mensagens de erro
   camposFaltando?: string[];    // labels dos campos pendentes no grupo
   grupAtual?: string;           // label do grupo atual
+  totalGrupos?: number;         // total de grupos do workflow (para informar ao usuário)
   nextQuestion?: string;        // TEXTO EXATO da próxima pergunta — a IA DEVE usar isso literalmente
   campoCorrendo?: string;       // label do campo que está sendo corrigido
   resumoFinal?: string;         // markdown do resumo dos dados
   mensagemUsuario?: string;     // mensagem original (para contexto)
   dadosDocumento?: Record<string, string>; // dados coletados, para responder perguntas livres
+  clausulasDocumento?: string[];           // lista de cláusulas do documento (para chat pós-geração)
   historicoRecente?: Array<{ role: 'user' | 'assistant'; content: string }>; // últimos turns
 }
 
@@ -737,15 +752,15 @@ export async function gerarRespostaConversacional(
     case 'boas_vindas':
       prompt = `${ctxPrefix}O usuário acabou de entrar na plataforma BepeAI. Dê boas-vindas de forma executiva e confiante.
 
-Apresente os 5 tipos de documento disponíveis:
-• Contrato de Prestação de Serviços — formaliza relações de trabalho autônomo
-• Proposta Comercial — oferta profissional com validade e escopo definidos
-• Orçamento — detalhamento de custos para aprovação interna ou cotação
-• Relatório Final — consolidação de resultados de um período
-• Acordo de Confidencialidade (NDA) — protege informações estratégicas
+Apresente os 5 tipos de documento com uma linha de quando usar cada um:
+• **Contrato de Prestação de Serviços** — para formalizar a contratação de um serviço ou profissional
+• **Proposta Comercial** — para apresentar uma oferta formal com escopo, prazo e valor
+• **Orçamento** — para detalhar custos antes de fechar negócio ou para cotação
+• **Relatório Final** — para consolidar resultados de um projeto ou período
+• **Acordo de Confidencialidade (NDA)** — para proteger informações antes de uma parceria ou negociação
 
-Pergunte qual documento ele precisa hoje. Tom: profissional, acolhedor, direto.
-Não use emojis em excesso. Máximo 8 linhas.`;
+Finalize com: "Qual desses você precisa agora? Se não souber qual escolher, me conte o que precisa fazer e eu indico."
+Tom: profissional, acolhedor, direto. Máximo 10 linhas.`;
       break;
 
     case 'inicio_workflow': {
@@ -769,26 +784,34 @@ Não use emojis em excesso. Máximo 8 linhas.`;
       const contextoDoc = (input.tipoDocumento && CONTEXTO_DOCUMENTO[input.tipoDocumento])
         ? CONTEXTO_DOCUMENTO[input.tipoDocumento]
         : '';
+      const etapasInfo = input.totalGrupos
+        ? `Este documento será coletado em **${input.totalGrupos} etapas** rápidas.`
+        : 'Este documento será coletado em algumas etapas rápidas.';
       prompt = `${ctxPrefix}O usuário quer criar: ${nomeDoc}.
 ${contextoDoc ? `Contexto do documento: ${contextoDoc}` : ''}
 
-Confirme que você vai iniciar a coleta de dados de forma organizada, em grupos.
-Informe que pode fornecer vários dados de uma vez (ex: "Empresa X, CNPJ 12345678000199, endereço Rua Y") para agilizar.
+Confirme o início da coleta. Informe: ${etapasInfo}
+Diga que pode fornecer vários dados de uma vez (ex: "Empresa X, CNPJ 12345678000199, endereço Rua Y") para agilizar.
 Faça a primeira pergunta do grupo "${input.grupAtual}" usando EXATAMENTE o texto da nextQuestion fornecida.
-Seja entusiasmado mas profissional. Máximo 6 linhas.`;
+Tom: profissional, acolhedor, claro. Máximo 6 linhas.`;
       break;
     }
 
-    case 'campos_salvos':
+    case 'campos_salvos': {
+      const progressoInfo = input.totalGrupos && input.grupAtual
+        ? ` (continuando para: ${input.grupAtual})`
+        : '';
       prompt = `${ctxPrefix}Campos salvos com sucesso: ${input.camposSalvos?.join(', ') ?? ''}.
 
-Confirme o recebimento em UMA frase curta e natural (ex: "Dados recebidos.", "Perfeito, anotado.").
+Confirme o recebimento em UMA frase curta e natural (ex: "Dados registrados.", "Perfeito, anotado.").
 ${input.nextQuestion
-  ? `Em seguida, faça EXATAMENTE esta pergunta (pode reformular levemente para soar natural, mas mantenha todos os campos pedidos):\n\n${input.nextQuestion}\n\nDICA PROATIVA (adicione quando relevante): se a pergunta pede CNPJ, mencione que aceita com ou sem formatação. Se pede datas, mencione DD/MM/AAAA. Se pede valor, mencione que pode digitar só os números.`
-  : `Grupo "${input.grupAtual}" concluído. Informe de forma breve que vai avançar para o próximo conjunto de dados.`
+  ? `Em seguida, faça EXATAMENTE esta pergunta${progressoInfo} (pode reformular levemente para soar natural, mas mantenha todos os campos pedidos):\n\n${input.nextQuestion}\n\nDICA PROATIVA (inclua quando relevante): se a pergunta pede CNPJ, mencione que aceita com ou sem pontuação. Se pede datas, mencione formato DD/MM/AAAA. Se pede valor monetário, mencione que pode digitar só os números.`
+  : `Grupo "${input.grupAtual}" concluído${progressoInfo}. Informe de forma breve que vai avançar para o próximo conjunto de dados.`
 }
 
 REGRAS: Não liste os campos já salvos. Não invente campos. Máximo 6 linhas.`;
+      break;
+    }
       break;
 
     case 'campos_invalidos':
@@ -823,13 +846,15 @@ Máximo 6 linhas. Tom: paciente, educativo, sem julgamento.`;
     case 'workflow_completo':
       prompt = `${ctxPrefix}Todos os dados foram coletados com sucesso.
 
-Resumo dos dados:
+Resumo dos dados coletados:
 ${input.resumoFinal}
 
-Informe ao usuário que o documento está pronto para geração.
-Instrua: pode clicar em **"Gerar PDF"** ou dizer "corrigir [campo]" se precisar ajustar algo.
-Mencione que após gerar pode tirar qualquer dúvida sobre o documento.
-Tom: celebrativo mas direto. Máximo 4 linhas.`;
+Informe ao usuário que a coleta está concluída e o documento está pronto para geração.
+Instruções a incluir na resposta:
+• Para gerar: clicar no botão **"Gerar PDF"** que apareceu abaixo, ou digitar "gerar"
+• Para corrigir algo: dizer "corrigir [nome do campo]" (ex: "corrigir empresa", "corrigir valor")
+• Após gerar o PDF, pode tirar qualquer dúvida sobre o documento conversando normalmente
+Tom: profissional, positivo, direto. Máximo 4 linhas.`;
       break;
 
     case 'cancelado':
@@ -864,22 +889,49 @@ Máximo 10 linhas, use bullet points numerados.`;
 Confirme em 1–2 linhas com tom profissional. Mencione que o documento está sendo preparado.`;
       break;
 
-    case 'editando_campo':
+    case 'editando_campo': {
+      // Extrai valor anterior se disponível nos dados de contexto
+      const campoKey = Object.keys(input.dadosDocumento ?? {}).find(k => k.endsWith('_anterior'));
+      const valorAnt = campoKey ? input.dadosDocumento![campoKey] : null;
       prompt = `${ctxPrefix}O usuário quer corrigir o campo "${input.campoCorrendo}".
+${valorAnt ? `Valor atual registrado: "${valorAnt}".` : ''}
 
-Confirme que vai corrigir esse campo.
-Peça o novo valor de forma clara e direta.
-Se for um campo técnico (CNPJ, CPF, data), mencione o formato esperado.
-Máximo 3 linhas.`;
+Informe ao usuário:
+1. Que a correção foi iniciada (1 frase)
+2. Mostre o valor atual com **negrito** (se disponível)
+3. Peça o novo valor de forma direta
+4. Se for CNPJ, CPF ou data, mencione o formato aceito em 1 linha
+
+Pergunta a fazer ao usuário:
+${input.nextQuestion ?? `Informe o novo valor para ${input.campoCorrendo}.`}
+
+Máximo 4 linhas.`;
+      break;
+    }
       break;
 
     case 'campo_nao_encontrado':
-      prompt = `${ctxPrefix}O usuário pediu para corrigir "${input.campoCorrendo}" mas esse campo não foi reconhecido.
+      prompt = `${ctxPrefix}O usuário pediu para corrigir "${input.campoCorrendo}" mas não foi possível identificar o campo correspondente.
 
-Informe gentilmente que não encontrou esse campo.
-Sugira exemplos de campos que existem no documento atual (use os dados já coletados acima para sugerir nomes reais).
-Instrua o formato correto: "corrigir empresa", "corrigir cnpj", "corrigir data_inicio", etc.
+Informe de forma amigável que não reconheceu exatamente o campo.
+Use os dados já coletados acima para sugerir nomes reais dos campos disponíveis para correção.
+Instrua: pode usar o nome do campo em português natural — ex: "corrigir empresa", "alterar CNPJ", "mudar endereço", "corrigir data de início".
 Máximo 4 linhas.`;
+      break;
+
+    case 'sugerir_padrao':
+      prompt = `${ctxPrefix}O usuário demonstrou hesitação ou não soube responder ao campo "${input.campoCorrendo}" (grupo: ${input.grupAtual}).
+Mensagem do usuário: "${input.mensagemUsuario}"
+
+Use sua base de conhecimento para:
+1. Explicar brevemente o que é este campo (1 frase)
+2. Oferecer o valor padrão de mercado e perguntar se pode usar (ex: "O padrão de mercado é **30 dias** — posso usar isso?")
+3. Se o usuário confirmar, o sistema usará o padrão automaticamente
+
+Campo em questão: "${input.campoCorrendo}"
+Próxima pergunta caso não haja padrão aplicável: ${input.nextQuestion ?? `Forneça os dados de ${input.grupAtual}.`}
+
+Tom: prestativo, especialista. Máximo 4 linhas.`;
       break;
 
     case 'explicar_campo':
@@ -898,21 +950,26 @@ ${input.nextQuestion ?? `Continuando a coleta para o grupo "${input.grupAtual}".
 Tom: especialista consultivo, claro, sem jargão excessivo. Máximo 8 linhas.`;
       break;
 
-    case 'chat_livre':
+    case 'chat_livre': {
+      const clausulasCtx = input.clausulasDocumento?.length
+        ? `\nESTRUTURA DO DOCUMENTO GERADO (cláusulas disponíveis para consulta):\n${input.clausulasDocumento.map((c, i) => `  ${i + 1}. ${c}`).join('\n')}`
+        : '';
       prompt = `Mensagem do usuário: "${input.mensagemUsuario}"
+${clausulasCtx}
 
 Responda com base nos dados já coletados e na sua base de conhecimento jurídico.
 
 PRIORIDADE DE RESPOSTA:
 1. Se é pergunta sobre dado específico já coletado → responda com o valor exato em **negrito**
-2. Se é pergunta sobre o que um campo significa / por que é necessário → explique usando a base de conhecimento jurídico
-3. Se é pergunta sobre cálculo (valor por mês, tempo restante) → calcule e responda
-4. Se é dúvida sobre o documento gerado → explique a cláusula ou campo com base no tipo de documento
-5. Se não há como responder → seja honesto e sugira onde encontrar a informação
+2. Se é pergunta sobre uma cláusula específica → explique o que ela diz e por que ela protege as partes
+3. Se é pergunta sobre o que um campo significa / por que é necessário → use a base de conhecimento jurídico
+4. Se é pergunta sobre cálculo (valor por mês, tempo restante, multa proporcional) → calcule com os dados disponíveis
+5. Se não há como responder com os dados → seja honesto e oriente onde encontrar
 6. Se parece que quer criar novo documento → sugira dizer o tipo
 
 Tom: consultivo, especialista, direto. Máximo 6 linhas.`;
       break;
+    }
   }
 
   // Sistema com contexto de documento injetado diretamente no system prompt

@@ -1,0 +1,51 @@
+# ================================================================
+# Render.com — Configuração de Deploy do Backend BepeAI
+# ================================================================
+# Como usar:
+#   1. Acesse https://render.com → New → Web Service
+#   2. Conecte o repositório GitHub
+#   3. Render detecta este arquivo automaticamente
+#   4. Configure as variáveis de ambiente no painel (Environment)
+# ================================================================
+
+services:
+  - type: web
+    name: bepeai-backend
+    runtime: node
+    rootDir: backend
+    region: oregon           # us-west-2 — mais próximo do Brasil disponível no plano free
+
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: node dist/server.js
+
+    # Plano free — trocar para "starter" ($7/mês) para eliminar o sleep
+    plan: free
+
+    healthCheckPath: /health
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      # Preencher manualmente no painel do Render (não commitar valores reais):
+      - key: JWT_SECRET
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD_HASH
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: LOG_LEVEL
+        value: info

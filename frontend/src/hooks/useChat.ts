@@ -125,7 +125,16 @@ export function useChat(onConversationChange?: () => void) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${tipoDocumento}_${Date.now()}.pdf`;
+    const nomes: Record<string, string> = {
+      contrato:           'BepeAI_Contrato_Prestacao_Servicos',
+      proposta_comercial: 'BepeAI_Proposta_Comercial',
+      orcamento:          'BepeAI_Orcamento',
+      relatorio_final:    'BepeAI_Relatorio_Final',
+      nda:                'BepeAI_Acordo_Confidencialidade',
+    };
+    const nomeArquivo = nomes[tipoDocumento] ?? `BepeAI_${tipoDocumento}`;
+    const data = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+    a.download = `${nomeArquivo}_${data}.pdf`;
     a.click();
     URL.revokeObjectURL(url);
   }, []);

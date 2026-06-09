@@ -27,6 +27,14 @@ export const login = async (req: Request, res: Response) => {
   if (!email || !password || typeof email !== 'string' || typeof password !== 'string') {
     return res.status(400).json({ error: 'Email e senha são obrigatórios' });
   }
+  // Limites de tamanho — previnem DoS e ataques de timing
+  if (email.length > 255 || password.length > 128) {
+    return res.status(400).json({ error: 'Credenciais inválidas' });
+  }
+  // Formato básico de email
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Credenciais inválidas' });
+  }
 
   // Timing-safe: sempre executa bcrypt.compare mesmo com email errado
   const emailMatch   = email === ADMIN_EMAIL;
