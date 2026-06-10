@@ -84,7 +84,9 @@ app.use(cors({
     if (!origin) return callback(null, true);
     if (env.ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
     logger.warn({ origin }, '[CORS] Origem bloqueada');
-    callback(new Error(`Origem não permitida: ${origin}`));
+    const err: any = new Error('Origem não permitida');
+    err.status = 403;
+    callback(err);
   },
   credentials: true,
   optionsSuccessStatus: 200,

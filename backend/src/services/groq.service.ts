@@ -20,11 +20,11 @@ import { env } from '../lib/env';
 const groq = new Groq({ apiKey: env.GROQ_API_KEY });
 
 // Modelos por responsabilidade:
-// 70B → extração multi-campo (maior precisão, menos alucinação)
-// 8B  → campo único e tarefas simples (baixa latência)
+// 70B versatile  → extração multi-campo JSON (estável, testado em produção)
+// Llama 4 Scout  → intenção e conversacional (MoE 17b ativo, melhor português jurídico)
 const MODEL_EXTRACTION     = 'llama-3.3-70b-versatile';
-const MODEL_INTENT         = 'llama-3.1-8b-instant';
-const MODEL_CONVERSATIONAL = 'llama-3.1-8b-instant'; // rápido, só gera texto natural
+const MODEL_INTENT         = 'meta-llama/llama-4-scout-17b-16e-instruct';
+const MODEL_CONVERSATIONAL = 'meta-llama/llama-4-scout-17b-16e-instruct';
 
 const GROQ_TIMEOUT_MS = 25_000;
 
