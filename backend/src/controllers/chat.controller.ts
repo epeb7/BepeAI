@@ -16,7 +16,7 @@ import {
   getProgressInfo,
 } from '../services/conversation.service';
 import { WorkflowState } from '../services/workflow.service';
-import { extrairMultiplosCampos, gerarRespostaConversacional, RespostaConversacionalInput } from '../services/groq.service';
+import { extrairMultiplosCampos, extrairCamposDeDocumento, gerarRespostaConversacional, RespostaConversacionalInput } from '../services/groq.service';
 import { detectIntent, extractFieldToEdit } from '../services/intent.service';
 import { workflows } from '../workflows/definitions';
 import { ensureConversation, logTurn, completeConversation, getConversationDetail } from '../services/conversation.logger';
@@ -752,8 +752,75 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
       const updatedConvId = await ensureConversation(userId, tipo, existingConvId ?? undefined);
       state = { ...state, conversationId: updatedConvId, turnNumber: 0 };
       await setState(userId, state);
+
+      // ── Pré-preenchimento a partir de arquivo anexado ──────────
+      // Se há um documento anexado, extrai dele todos os campos possíveis
+      // e aplica grupo a grupo, deixando só o que faltou para o usuário.
+      const arquivos = await carregarArquivos();
+      let preenchidosDeArquivo: string[] = [];
+      if (arquivos.length > 0) {
+        const textoConcatenado = arquivos.map(a => `### ${a.nome}\n${a.conteudo}`).join('\n\n');
+        const todosCampos = workflows[tipo].steps;
+        const extraidos = await extrairCamposDeDocumento(textoConcatenado, todosCampos);
+
+        if (Object.keys(extraidos).length > 0) {
+          // Aplica em loop: o engine avança um grupo por vez, então repetimos
+          // até não conseguir salvar mais nada no grupo atual.
+          let avancou = true;
+          while (avancou && !isWorkflowComplete(state)) {
+            const grupoAtual = getCurrentGroup(state);
+            if (!grupoAtual) break;
+            const { newState, savedFields } = await applyFields(userId, extraidos, state);
+            state = { ...newState, conversationId: state.conversationId, turnNumber: 0 };
+            preenchidosDeArquivo.push(...savedFields);
+            avancou = savedFields.length > 0;
+          }
+          // Guarda os campos do arquivo que ainda não foram aplicados (grupos futuros)
+          // para reaplicá-los conforme o usuário avança a coleta.
+          const naoAplicados: Record<string, string> = {};
+          for (const [k, v] of Object.entries(extraidos)) {
+            if (!state.completedFields.includes(k)) naoAplicados[k] = v;
+          }
+          state = { ...state, pendingFileFields: Object.keys(naoAplicados).length > 0 ? naoAplicados : undefined };
+          await setState(userId, state);
+        }
+      }
+
       const grupLabel  = getCurrentGroup(state)?.label ?? '';
       const totalGrupos = workflows[tipo]?.fieldGroups.length ?? 0;
+
+      // Workflow já ficou completo só com o arquivo
+      if (isWorkflowComplete(state)) {
+        const resumo = buildResumoFormatado(state);
+        const textoCompleto = await resposta(
+          { situacao: 'workflow_completo', tipoDocumento: tipo, resumoFinal: resumo },
+          `Extraí os dados do arquivo. **Revise com atenção** — a leitura automática pode conter erros:\n\n${resumo}\n\nSe algo estiver errado, diga "corrigir [campo]". Se estiver tudo certo, gere o PDF.`,
+          state
+        );
+        logTurn({ userId, conversationId: state.conversationId!, turnNumber: 1, userMessage: message, aiResponse: textoCompleto, savedFields: preenchidosDeArquivo });
+        return res.json(buildResponse(textoCompleto, state, true, { readyToDownload: true }));
+      }
+
+      // Pré-preencheu parte: confirma o que veio do arquivo e pergunta o que falta
+      if (preenchidosDeArquivo.length > 0) {
+        const labels = preenchidosDeArquivo.map(f => FIELD_LABELS[f] ?? f.replace(/_/g, ' '));
+        const textoPre = await resposta(
+          {
+            situacao: 'campos_salvos',
+            tipoDocumento: tipo,
+            camposSalvos: labels,
+            grupAtual: grupLabel,
+            totalGrupos,
+            nextQuestion: getCurrentGroupQuestion(state) ?? undefined,
+          },
+          `Analisei o arquivo e já preenchi: **${labels.join(', ')}**.\n\n${getCurrentGroupQuestion(state) ?? ''}`,
+          state
+        );
+        logTurn({ userId, conversationId: state.conversationId!, turnNumber: 1, userMessage: message, aiResponse: textoPre, savedFields: preenchidosDeArquivo });
+        return res.json(buildResponse(textoPre, state));
+      }
+
+      // Sem arquivo (ou nada extraído) — fluxo normal de início
       const textoInit = await resposta(
         { situacao: 'inicio_workflow', tipoDocumento: tipo, grupAtual: grupLabel, totalGrupos },
         `Iniciando coleta de dados para o seu documento. Serão **${totalGrupos} etapas** no total.\n\n${getCurrentGroupQuestion(state)}`,
@@ -763,9 +830,23 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
       return res.json(buildResponse(textoInit, state));
     }
 
+    // Detecta perguntas sobre a plataforma em si (capacidades, limitações, como funciona)
+    const PADROES_PLATAFORMA = [
+      /\b(como funciona|o que [eé]|para que serve|o que voc[eê] (faz|consegue|pode))\b/i,
+      /\b(tem como|[eé] poss[ií]vel|voc[eê] (suporta|aceita|permite|tem))\b/i,
+      /\b(meu (pr[oó]prio|personalizado)|layout|template|modelo|marca|logo|identidade visual)\b/i,
+      /\b(customiza[çc][aã]o|personalizar|personaliza[çc][aã]o|brand(ing)?)\b/i,
+      /\b(plataforma|sistema|ferramenta|recurso|funcionalidade|vers[aã]o)\b/i,
+      /\b(exportar|exporta[çc][aã]o|docx|word|integra[çc][aã]o|api|erp|crm)\b/i,
+      /\b(assinatura (digital|eletr[oô]nica)|docusign|clicksign)\b/i,
+      /\b(quantos (documentos|tipos)|quais (documentos|tipos))\b/i,
+      /\b(pre[çc]o|plano|custo|cobr(a|ança|ar))\b/i,
+    ];
+    const isPerguntaPlataforma = PADROES_PLATAFORMA.some(p => p.test(message));
+
     const textoDefault = await resposta(
       {
-        situacao: 'chat_livre',
+        situacao: isPerguntaPlataforma ? 'perguntas_sobre_plataforma' : 'chat_livre',
         mensagemUsuario: message,
         dadosDocumento: {},
       },
@@ -780,7 +861,7 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
   // ── WORKFLOW ATIVO — extração e avanço ────────────────────
   const currentGroup = getCurrentGroup(state);
   if (!currentGroup) {
-    await deleteState(userId);
+    void deleteState(userId);
     return res.json(buildResponse('Erro de estado interno detectado. A conversa foi reiniciada.', await getState(userId)));
   }
 
@@ -789,16 +870,77 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     state.pendingFieldsInCurrentGroup.includes(s.field)
   );
 
-  const extracted = await extrairMultiplosCampos(message, camposPendentes, currentGroup.label);
+  // ── Campos com padrão de mercado (precisamos antes da extração para detectar hesitação) ──
+  const CAMPOS_COM_PADRAO: Record<string, string> = {
+    aviso_previo:            '30',
+    validade_proposta:       '30',
+    validade_orcamento:      '15',
+    vigencia_meses:          '12',
+    prazo_confidencialidade: '3',
+    dia_pagamento:           '10',
+  };
+
+  // ── Detecta se a mensagem é uma pergunta sobre campos/doc ──
+  // Feito ANTES da extração para poder paralelizar com o LLM.
+  const PADROES_PERGUNTA_CAMPO = [
+    /\bo que [eé]\b/i,
+    /\bpara que serve\b/i,
+    /\bpor que (preciso|é necessário|pede|pedir)\b/i,
+    /\bpreciso mesmo\b/i,
+    /\bposso pular\b/i,
+    /\bé obrigatório\b/i,
+    /\bnão sei o (que|qual)\b/i,
+    /\bme (explica|explique|conta|fala sobre)\b/i,
+    /\bqual (a diferença|o objetivo|a finalidade)\b/i,
+    /\bcomo (preencher|colocar|informar|escrever|funciona|funciona o)\b/i,
+    /\bo que significa\b/i, /\bsignificado\b/i,
+    /\bcomo assim\b/i, /\bnão (entendo|entendi)\b/i,
+    /\bsim, mas\b/i, /^\s*\?+\s*$/,
+  ];
+  const PADROES_HESITACAO = [
+    /\bnão sei\b/i, /\bnao sei\b/i,
+    /\bnão tenho (certeza|ideia)\b/i, /\bqualquer (um|valor|data)\b/i,
+    /\bpode ser qualquer\b/i, /\buse o padrão\b/i, /\buse o padrao\b/i,
+    /\bpadrão de mercado\b/i, /\bsugira\b/i,
+    /\bvocê decide\b/i, /\bvoce decide\b/i,
+    /\bcoloca o normal\b/i, /\bcoloca o padrão\b/i,
+  ];
+
+  const parece_pergunta = isConversacional(message) || PADROES_PERGUNTA_CAMPO.some(p => p.test(message));
+  const parece_hesitacao = PADROES_HESITACAO.some(p => p.test(message));
+  const campoPendentePadrao = state.pendingFieldsInCurrentGroup.find(f => f in CAMPOS_COM_PADRAO);
+
+  // ── Paralelismo: extração LLM + carregamento de arquivos (quando relevante) ──
+  // Se a mensagem parece uma pergunta, já sabemos que precisaremos dos arquivos.
+  // Dispara ambos ao mesmo tempo em vez de sequencial.
+  const [extracted, arquivosPrecarregados] = await Promise.all([
+    extrairMultiplosCampos(message, camposPendentes, currentGroup.label),
+    parece_pergunta ? carregarArquivos() : Promise.resolve(null),
+  ]);
+
+  // Mescla campos do arquivo ainda pendentes — usuário tem prioridade sobre arquivo.
+  if (state.pendingFileFields) {
+    for (const f of state.pendingFieldsInCurrentGroup) {
+      if (state.pendingFileFields[f] && !extracted[f]) {
+        extracted[f] = state.pendingFileFields[f];
+      }
+    }
+  }
 
   logger.debug({ userId, group: currentGroup.id, extracted: Object.keys(extracted) }, '[Chat] Campos extraídos');
 
-  // Passa o state atual para evitar race condition (applyFields não re-busca do store)
   const { newState, savedFields, invalidFields, stillMissing } = await applyFields(userId, extracted, state);
   state = { ...newState, conversationId: state.conversationId, turnNumber };
-  await setState(userId, state);
 
-  // Labels legíveis para a IA
+  if (state.pendingFileFields && savedFields.length > 0) {
+    const restante = { ...state.pendingFileFields };
+    for (const f of savedFields) delete restante[f];
+    state = { ...state, pendingFileFields: Object.keys(restante).length > 0 ? restante : undefined };
+  }
+
+  // setState fire-and-forget — não bloqueia a resposta ao usuário
+  void setState(userId, state);
+
   const savedLabels   = savedFields.map(f => FIELD_LABELS[f] ?? f.replace(/_/g, ' '));
   const invalidLabels = invalidFields.map(e => e.error);
   const missingLabels = stillMissing.map(f => FIELD_LABELS[f] ?? f.replace(/_/g, ' '));
@@ -812,73 +954,39 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
       `✅ **Coleta concluída!**\n\n${resumo}\n\nClique em **Gerar PDF** para baixar seu documento, ou diga **"corrigir [campo]"** para ajustar algo.`,
       state
     );
-    logTurn({ userId, conversationId: state.conversationId!, turnNumber, userMessage: message, aiResponse: textoFinal, groupId: currentGroup.id, extractedFields: extracted, savedFields });
-    completeConversation(state.conversationId!, state.data);
+    // Persistência fire-and-forget — não atrasa a resposta
+    void logTurn({ userId, conversationId: state.conversationId!, turnNumber, userMessage: message, aiResponse: textoFinal, groupId: currentGroup.id, extractedFields: extracted, savedFields });
+    void completeConversation(state.conversationId!, state.data);
     return res.json(buildResponse(textoFinal, state, true, { readyToDownload: true }));
   }
 
-  // ── Detecta se a mensagem é uma pergunta sobre campos/doc ──
-  const PADROES_PERGUNTA_CAMPO = [
-    /\bo que [eé]\b/i,
-    /\bpara que serve\b/i,
-    /\bpor que (preciso|é necessário|pede|pedir)\b/i,
-    /\bpreciso mesmo\b/i,
-    /\bposso pular\b/i,
-    /\bé obrigatório\b/i,
-    /\bnão sei o (que|qual)\b/i,
-    /\bme (explica|explique|conta|fala sobre)\b/i,
-    /\bqual (a diferença|o objetivo|a finalidade)\b/i,
-    /\bcomo (preencher|colocar|informar|escrever|funciona|funciona o)\b/i,
-    /\bo que significa\b/i,
-    /\bsignificado\b/i,
-    /\bcomo assim\b/i,
-    /\bnão (entendo|entendi)\b/i,
-    /\bsim, mas\b/i,  // "sim, mas como funciona..." — concorda mas quer explicação
-    /^\s*\?+\s*$/,
+  // ── Detecta pergunta sobre a plataforma (mesmo durante workflow) ──
+  const PADROES_PLATAFORMA_WORKFLOW = [
+    /\b(layout|template|modelo|marca|logo|identidade visual)\b/i,
+    /\b(customiza[çc][aã]o|personalizar|personaliza[çc][aã]o|meu pr[oó]prio)\b/i,
+    /\b(plataforma|sistema|ferramenta|recurso|funcionalidade)\b/i,
+    /\b(exportar|docx|word|integra[çc][aã]o|erp|crm)\b/i,
+    /\b(assinatura (digital|eletr[oô]nica)|docusign|clicksign)\b/i,
+    /\b(tem como (eu|a gente)|[eé] poss[ií]vel (ter|usar|colocar))\b/i,
+    /\b(pre[çc]o|plano|custo|cobr(a|ança|ar))\b/i,
   ];
-  const isPerguntaCampo = savedFields.length === 0 && invalidFields.length === 0
-    && (isConversacional(message) || PADROES_PERGUNTA_CAMPO.some(p => p.test(message)));
-
-  // ── Detecta hesitação / não saber o valor ─────────────────
-  const PADROES_HESITACAO = [
-    /\bnão sei\b/i, /\bnao sei\b/i,
-    /\bnão tenho (certeza|ideia)\b/i, /\bqualquer (um|valor|data)\b/i,
-    /\bpode ser qualquer\b/i, /\buse o padrão\b/i,
-    /\buse o padrao\b/i, /\bpadrão de mercado\b/i,
-    /\bsugira\b/i, /\bvocê decide\b/i, /\bvoce decide\b/i,
-    /\bcoloca o normal\b/i, /\bcoloca o padrão\b/i,
-  ];
-  // Campos que têm valor padrão de mercado
-  const CAMPOS_COM_PADRAO: Record<string, string> = {
-    aviso_previo:            '30',
-    validade_proposta:       '30',
-    validade_orcamento:      '15',
-    vigencia_meses:          '12',
-    prazo_confidencialidade: '3',
-    dia_pagamento:           '10',
-  };
-  const pendingFieldNames = state.pendingFieldsInCurrentGroup;
-  const campoPendentePadrao = pendingFieldNames.find(f => f in CAMPOS_COM_PADRAO);
-  const isHesitacao = savedFields.length === 0 && invalidFields.length === 0
-    && !isPerguntaCampo
-    && PADROES_HESITACAO.some(p => p.test(message))
-    && !!campoPendentePadrao;
+  const isPerguntaPlataforma = savedFields.length === 0 && invalidFields.length === 0
+    && PADROES_PLATAFORMA_WORKFLOW.some(p => p.test(message));
 
   // ── Determina situação para gerar resposta ─────────────────
-  let situacao: RespostaConversacionalInput['situacao'];
-  if (savedFields.length > 0 && invalidFields.length === 0) {
-    situacao = 'campos_salvos';
-  } else if (invalidFields.length > 0) {
-    situacao = 'campos_invalidos';
-  } else if (isPerguntaCampo) {
-    situacao = 'explicar_campo';
-  } else if (isHesitacao) {
-    situacao = 'sugerir_padrao';
-  } else {
-    situacao = 'sem_extracao';
-  }
+  const isPerguntaCampo = savedFields.length === 0 && invalidFields.length === 0
+    && !isPerguntaPlataforma && parece_pergunta;
+  const isHesitacao     = savedFields.length === 0 && invalidFields.length === 0
+    && !isPerguntaCampo && !isPerguntaPlataforma && parece_hesitacao && !!campoPendentePadrao;
 
-  // Fallback hardcoded (caso Groq falhe)
+  let situacao: RespostaConversacionalInput['situacao'];
+  if      (savedFields.length > 0 && invalidFields.length === 0) situacao = 'campos_salvos';
+  else if (invalidFields.length > 0)                             situacao = 'campos_invalidos';
+  else if (isPerguntaPlataforma)                                 situacao = 'perguntas_sobre_plataforma';
+  else if (isPerguntaCampo)                                      situacao = 'explicar_campo';
+  else if (isHesitacao)                                          situacao = 'sugerir_padrao';
+  else                                                           situacao = 'sem_extracao';
+
   let fallback = '';
   if (situacao === 'campos_salvos') {
     fallback = savedLabels.length === currentGroup.fields.length && invalidFields.length === 0
@@ -886,25 +994,27 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
       : `Recebi: **${savedLabels.join(', ')}**.\n\n${getCurrentGroupQuestion(state) ?? ''}`;
   } else if (situacao === 'campos_invalidos') {
     fallback = `Atenção com o formato:\n${invalidLabels.map(e => `• ${e}`).join('\n')}\n\n${getCurrentGroupQuestion(state) ?? ''}`;
+  } else if (situacao === 'perguntas_sobre_plataforma') {
+    fallback = `Responderei sua dúvida sobre a plataforma e depois continuamos a coleta.\n\n${getCurrentGroupQuestion(state) ?? ''}`;
   } else if (situacao === 'explicar_campo') {
     fallback = `Para tirar dúvidas sobre este campo, veja as instruções abaixo.\n\n${getCurrentGroupQuestion(state) ?? 'Por favor, forneça as informações solicitadas.'}`;
   } else if (situacao === 'sugerir_padrao') {
     const fieldPadrao = campoPendentePadrao ?? '';
     const labelPadrao = FIELD_LABELS[fieldPadrao] ?? fieldPadrao.replace(/_/g, ' ');
-    const valorPadrao = CAMPOS_COM_PADRAO[fieldPadrao] ?? '';
-    fallback = `**${labelPadrao}**: o padrão de mercado é **${valorPadrao}**. Posso usar esse valor?`;
+    fallback = `**${labelPadrao}**: o padrão de mercado é **${CAMPOS_COM_PADRAO[fieldPadrao] ?? ''}**. Posso usar esse valor?`;
   } else {
     fallback = `Não consegui identificar as informações solicitadas. ${getCurrentGroupQuestion(state) ?? 'Por favor, forneça os dados pedidos.'}`;
   }
 
-  const nextQuestion = getCurrentGroupQuestion(state) ?? undefined;
+  const nextQuestion     = getCurrentGroupQuestion(state) ?? undefined;
   const fieldPadraoLabel = campoPendentePadrao
     ? (FIELD_LABELS[campoPendentePadrao] ?? campoPendentePadrao.replace(/_/g, ' '))
     : undefined;
 
-  // Arquivos só importam quando o usuário está perguntando algo (explicar_campo);
-  // numa extração normal de campos, não carrega o texto (economiza tokens/latência).
-  const arquivosParaResposta = situacao === 'explicar_campo' ? await carregarArquivos() : undefined;
+  // Usa arquivos já carregados em paralelo se disponíveis, senão carrega agora só se necessário.
+  const arquivosParaResposta = (isPerguntaCampo || isPerguntaPlataforma)
+    ? (arquivosPrecarregados ?? await carregarArquivos())
+    : undefined;
 
   const textoResposta = await resposta(
     {
@@ -924,8 +1034,8 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     arquivosParaResposta
   );
 
-  // ── Log turn no Supabase (fire-and-forget) ─────────────────
-  logTurn({
+  // Persistência fire-and-forget — não atrasa a resposta ao usuário
+  void logTurn({
     userId,
     conversationId: state.conversationId!,
     turnNumber,

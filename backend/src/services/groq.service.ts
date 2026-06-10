@@ -11,56 +11,10 @@
  * chamadas por documento completo.
  */
 
-import Groq from 'groq-sdk';
 import { WorkflowStep } from '../workflows/definitions';
 import { sanitizePromptInput } from '../lib/sanitize';
 import logger from '../lib/logger';
-import { env } from '../lib/env';
-
-const groq = new Groq({ apiKey: env.GROQ_API_KEY });
-
-// Modelos por responsabilidade:
-// 70B versatile  → extração multi-campo JSON (estável, testado em produção)
-// Llama 4 Scout  → intenção e conversacional (MoE 17b ativo, melhor português jurídico)
-const MODEL_EXTRACTION     = 'llama-3.3-70b-versatile';
-const MODEL_INTENT         = 'meta-llama/llama-4-scout-17b-16e-instruct';
-const MODEL_CONVERSATIONAL = 'meta-llama/llama-4-scout-17b-16e-instruct';
-
-const GROQ_TIMEOUT_MS = 25_000;
-
-// ── Timeout wrapper ───────────────────────────────────────────
-// O timer é limpo assim que a promise original resolve/rejeita, evitando
-// timers pendentes acumulados sob carga.
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  let timer: NodeJS.Timeout;
-  const timeout = new Promise<T>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`[Groq] Timeout (${ms}ms): ${label}`)), ms);
-  });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
-}
-
-// ── Retry com backoff exponencial ────────────────────────────
-async function withRetry<T>(
-  fn: () => Promise<T>,
-  label: string,
-  maxAttempts = 3
-): Promise<T> {
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      return await withTimeout(fn(), GROQ_TIMEOUT_MS, label);
-    } catch (err: unknown) {
-      const msg = (err as Error)?.message ?? '';
-      if (msg.includes('Timeout')) throw err; // não retenta timeout
-      const status = (err as { status?: number })?.status;
-      const retryable = status === 429 || status === 503 || status === 502;
-      if (!retryable || attempt === maxAttempts) throw err;
-      const delay = Math.pow(2, attempt) * 500; // 1s, 2s, 4s
-      logger.warn({ label, attempt, delay, status }, '[Groq] Retry após erro transitório');
-      await new Promise(r => setTimeout(r, delay));
-    }
-  }
-  throw new Error(`[Groq] ${label} falhou após ${maxAttempts} tentativas`);
-}
+import { llmCall } from '../lib/llm.client';
 
 // ============================================================
 // Detecção de falhas de extração
@@ -155,8 +109,10 @@ function extrairValorMonetario(texto: string, labelRegex?: RegExp): string | nul
 }
 
 function extrairTextoLivre(texto: string, labels: string[]): string | null {
+  // Exige ":" após o label — evita capturar cabeçalhos de seção
+  // (ex: "OBJETO E CONDICOES") ou o label embutido em prosa.
   for (const lbl of labels) {
-    const m = texto.match(new RegExp(`${lbl}\\s*:?\\s*([^\\n]{2,200})`, 'i'));
+    const m = texto.match(new RegExp(`\\b${lbl}\\s*:\\s*([^\\n]{2,200})`, 'i'));
     if (m) return m[1].trim();
   }
   return null;
@@ -501,22 +457,19 @@ INSTRUÇÕES:
 Retorne JSON com exatamente estas chaves: { ${expectedKeys} }`;
 
   try {
-    const completion = await withRetry(
-      () => groq.chat.completions.create({
+    const { content, provider } = await llmCall(
+      {
         messages: [
           { role: 'system', content: SYSTEM_PROMPT_MULTI },
-          { role: 'user', content: userPrompt },
+          { role: 'user',   content: userPrompt },
         ],
-        model: MODEL_EXTRACTION,
+        taskType:    'extraction',
         temperature: 0,
-        max_tokens: 600,
-      }),
+        max_tokens:  600,
+      },
       'extrairMultiplosCampos'
     );
 
-    const content = completion.choices[0]?.message?.content?.trim() ?? '{}';
-
-    // Extrai JSON mesmo se vier com texto ao redor
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('Resposta sem JSON válido');
 
@@ -530,13 +483,173 @@ Retorne JSON com exatamente estas chaves: { ${expectedKeys} }`;
     }
 
     logger.debug(
-      { fields: camposParaLLM.map(c => c.field), found: Object.keys(resultado).length },
-      '[Groq] Extração multi-campo concluída'
+      { fields: camposParaLLM.map(c => c.field), found: Object.keys(resultado).length, provider },
+      '[LLM] Extração multi-campo concluída'
     );
   } catch (err) {
     logger.error(
       { err, campos: camposParaLLM.map(c => c.field) },
-      '[Groq] Erro na extração multi-campo'
+      '[LLM] Erro na extração multi-campo'
+    );
+  }
+
+  return resultado;
+}
+
+// ============================================================
+// Extração de campos a partir de um DOCUMENTO anexado (PDF/DOCX/etc)
+// ============================================================
+
+// Limite maior que o de chat — um documento tem muito mais texto.
+const MAX_DOC_CHARS = 12_000;
+
+/**
+ * Extrai TODOS os campos de um workflow a partir do texto de um documento.
+ * Diferente de extrairMultiplosCampos (que olha a mensagem de chat e um grupo),
+ * aqui varremos o documento inteiro contra todos os campos de uma vez.
+ * Campos não encontrados simplesmente não aparecem no resultado.
+ */
+// Limpeza de valor: remove "label do próximo campo" colado e rejeita lixo.
+function limparValorCampo(raw: string, campo: WorkflowStep): string | null {
+  let v = raw.trim();
+  if (!v || isExtracaoFalha(v)) return null;
+  // Corta a partir de um "Label:" embutido — só uma ÚNICA palavra seguida de ":".
+  v = v.replace(/\s+[A-Za-zÀ-ú]{3,15}:\s.*$/, '').trim();
+  if (!v) return null;
+  const ehLongo = ['objeto_servicos', 'escopo', 'resumo', 'resultados', 'recomendacoes', 'descricao_itens'].some(k => campo.field.includes(k));
+  if (!ehLongo) {
+    if (v.length > 120) return null;
+    if ((v.match(/,/g) || []).length >= 3) return null;
+  }
+  if (campo.validator && !campo.validator(v)) return null;
+  return v;
+}
+
+// Extrai um conjunto de campos de um trecho de texto (regex + LLM).
+async function extrairBloco(
+  texto: string,
+  campos: WorkflowStep[],
+  contexto: string
+): Promise<Record<string, string>> {
+  const resultado: Record<string, string> = {};
+  const camposParaLLM: WorkflowStep[] = [];
+  for (const campo of campos) {
+    const valor = extrairCampoManual(texto, campo.field);
+    const limpo = valor ? limparValorCampo(valor, campo) : null;
+    if (limpo) resultado[campo.field] = limpo;
+    else camposParaLLM.push(campo);
+  }
+  if (camposParaLLM.length === 0) return resultado;
+
+  const fieldDescriptions = camposParaLLM
+    .map(c => {
+      const parts = [`"${c.field}": ${c.question}`];
+      if (c.example) parts.push(`(ex: ${c.example})`);
+      return parts.join(' ');
+    })
+    .join('\n');
+  const expectedKeys = camposParaLLM.map(c => `"${c.field}"`).join(', ');
+
+  const userPrompt = `Você recebeu o TEXTO DE UM DOCUMENTO${contexto ? ` (${contexto})` : ''}. Extraia dele os campos abaixo.
+
+CAMPOS A EXTRAIR:
+${fieldDescriptions}
+
+TEXTO:
+"""
+${texto}
+"""
+
+INSTRUÇÕES (LEIA COM ATENÇÃO):
+- Extraia um campo APENAS se o valor estiver CLARAMENTE e EXPLICITAMENTE no texto.
+- Na dúvida, retorne "" — é MELHOR deixar vazio do que preencher errado.
+- Extraia APENAS o valor (ex: "Tech Soluções Ltda", não "Razão social: Tech Soluções Ltda").
+- NUNCA junte dados de campos diferentes num mesmo campo.
+- NUNCA copie trechos de cláusulas, parágrafos ou frases inteiras para um campo.
+- NUNCA use o título/cabeçalho de uma seção como valor (ex: "OBJETO E CONDICOES" NÃO é um objeto válido).
+- Um campo de NOME recebe só um nome; CARGO só um cargo; ESTADO só a sigla (2 letras).
+- Se houver placeholders genéricos (ex: "Nome / CPF"), trate como NÃO preenchido e retorne "".
+- Quando dois campos estiverem na MESMA linha (ex: "Cidade: Sao Paulo  Estado: SP"), separe corretamente.
+- Normalize: CNPJ/CPF só números, datas DD/MM/AAAA, valores sem "R$" com ponto decimal.
+- Não invente, não deduza, não complete dados que não estejam escritos.
+
+Retorne JSON com exatamente estas chaves: { ${expectedKeys} }`;
+
+  try {
+    const { content } = await llmCall(
+      {
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT_MULTI },
+          { role: 'user',   content: userPrompt },
+        ],
+        taskType:    'extraction',
+        temperature: 0,
+        max_tokens:  1200,
+      },
+      'extrairBloco'
+    );
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('Resposta sem JSON válido');
+    const extracted: Record<string, unknown> = JSON.parse(jsonMatch[0]);
+    for (const campo of camposParaLLM) {
+      const val = extracted[campo.field];
+      if (typeof val !== 'string') continue;
+      const limpo = limparValorCampo(val, campo);
+      if (limpo) resultado[campo.field] = limpo;
+    }
+  } catch (err) {
+    logger.error({ err, contexto }, '[LLM] Erro na extração de bloco');
+  }
+  return resultado;
+}
+
+// Separa o texto na seção da CONTRATADA, se houver marcador claro.
+// Retorna { contratante, contratado } com os trechos, ou null se não der pra separar.
+function segmentarPartes(texto: string): { contratante: string; contratado: string } | null {
+  // Procura o marcador de início da CONTRATADA (com ou sem acento, com variações)
+  const m = texto.match(/\b(CONTRATAD[AO]|DADOS\s+DA\s+CONTRATAD[AO]|CONTRATAD[AO]\s*:)/i);
+  if (!m || m.index === undefined || m.index < 30) return null;
+  return {
+    contratante: texto.slice(0, m.index),
+    contratado: texto.slice(m.index),
+  };
+}
+
+export async function extrairCamposDeDocumento(
+  textoDocumento: string,
+  todosCampos: WorkflowStep[]
+): Promise<Record<string, string>> {
+  const texto = textoDocumento.slice(0, MAX_DOC_CHARS);
+
+  // Campos divididos por papel (contratante_*, contratado_*) e os demais (comuns)
+  const camposContratante = todosCampos.filter(c => c.field.startsWith('contratante_'));
+  const camposContratado  = todosCampos.filter(c => c.field.startsWith('contratado_'));
+  const camposComuns      = todosCampos.filter(c => !c.field.startsWith('contratante_') && !c.field.startsWith('contratado_'));
+
+  const seg = (camposContratante.length > 0 && camposContratado.length > 0)
+    ? segmentarPartes(texto)
+    : null;
+
+  let resultado: Record<string, string> = {};
+
+  if (seg) {
+    // Extrai cada parte do SEU trecho — evita cruzar dados entre contratante/contratado
+    const [rContratante, rContratado, rComuns] = await Promise.all([
+      extrairBloco(seg.contratante, camposContratante, 'dados da CONTRATANTE'),
+      extrairBloco(seg.contratado, camposContratado, 'dados da CONTRATADA'),
+      extrairBloco(texto, camposComuns, 'condições gerais do contrato'),
+    ]);
+    resultado = { ...rContratante, ...rContratado, ...rComuns };
+    logger.info(
+      { modo: 'segmentado', totalCampos: todosCampos.length, extraidos: Object.keys(resultado).length },
+      '[Groq] Extração de campos do documento concluída'
+    );
+  } else {
+    // Documento sem seções claras de partes — extrai tudo de uma vez
+    resultado = await extrairBloco(texto, todosCampos, 'documento');
+    logger.info(
+      { modo: 'unico', totalCampos: todosCampos.length, extraidos: Object.keys(resultado).length },
+      '[Groq] Extração de campos do documento concluída'
     );
   }
 
@@ -551,7 +664,7 @@ export interface RespostaConversacionalInput {
   situacao: 'boas_vindas' | 'inicio_workflow' | 'campos_salvos' | 'campos_invalidos'
           | 'sem_extracao' | 'workflow_completo' | 'cancelado' | 'ajuda'
           | 'confirmado' | 'editando_campo' | 'campo_nao_encontrado' | 'chat_livre'
-          | 'explicar_campo' | 'sugerir_padrao';
+          | 'explicar_campo' | 'sugerir_padrao' | 'perguntas_sobre_plataforma';
   tipoDocumento?: string;
   camposSalvos?: string[];      // labels legíveis dos campos
   camposInvalidos?: string[];   // mensagens de erro
@@ -571,6 +684,44 @@ export interface RespostaConversacionalInput {
 const SYSTEM_CONVERSACIONAL = `Você é a BepeAI, especialista em automação documental jurídica para empresas brasileiras.
 
 Seu papel duplo: (1) conduzir coleta de dados para documentos jurídicos profissionais e (2) atuar como consultora documental — explicando campos, cláusulas, obrigatoriedades e boas práticas, tanto durante quanto após a coleta.
+
+═══════════════════════════════════════════
+IDENTIDADE E FUNCIONAMENTO DA PLATAFORMA
+═══════════════════════════════════════════
+
+O QUE É O BEPEAI:
+• Plataforma de automação documental jurídica via chat conversacional
+• Você coleta dados através de uma conversa guiada e gera documentos jurídicos profissionais em PDF
+• Atende empresas brasileiras que precisam formalizar relações comerciais sem precisar de advogado para cada documento padrão
+
+COMO FUNCIONA (passo a passo que você deve saber explicar):
+1. Usuário inicia dizendo o tipo de documento que quer criar
+2. Você conduz a coleta de dados por etapas (grupos de campos relacionados)
+3. Quando todos os dados estão preenchidos, o usuário clica em "Gerar PDF"
+4. O PDF é gerado com layout profissional, cláusulas jurídicas completas e dados inseridos
+5. O usuário baixa e usa imediatamente — assinatura digital pode ser feita externamente
+
+DOCUMENTOS DISPONÍVEIS (o que você consegue criar hoje):
+• **Contrato de Prestação de Serviços** — formaliza contratação de serviço ou profissional
+• **Proposta Comercial** — oferta formal com escopo, prazo e valor; tem prazo de validade
+• **Orçamento** — detalhamento de custos para aprovação ou cotação
+• **Relatório Final** — consolidação de resultados de projeto ou período
+• **Acordo de Confidencialidade (NDA)** — proteção de informações estratégicas antes de parcerias
+
+CUSTOMIZAÇÃO E LIMITES (responda com honestidade):
+• Layout de PDF: atualmente o sistema usa templates padrão profissionais; personalização com logo/cores da empresa do cliente NÃO está disponível ainda — é uma funcionalidade prevista para versões futuras
+• Modelos personalizados por empresa: não disponível ainda; todos usam o mesmo template padrão BepeAI
+• Campos adicionais fora do template: não é possível pelo chat — o template tem campos fixos por tipo de documento
+• Exportação em DOCX: apenas PDF por enquanto
+• Integração com sistemas externos (ERP, CRM): não disponível
+• Assinatura digital integrada: não disponível — o PDF pode ser assinado externamente em DocuSign, ClickSign etc.
+• Acesso: via convite — a plataforma não é aberta ao público geral; novos usuários precisam de token de convite
+
+QUANDO UM USUÁRIO PERGUNTAR SOBRE FUNCIONALIDADES NÃO DISPONÍVEIS:
+• Seja honesto: diga claramente que a funcionalidade ainda não existe
+• Nunca prometa prazos que não foram confirmados
+• Sugira alternativas quando houver (ex: "para logo na capa, você pode adicionar ao assinar externamente")
+• Registre o interesse: "Anoto que essa funcionalidade seria útil para você — é um pedido válido para futuras versões"
 
 ═══════════════════════════════════════════
 PERSONALIDADE E TOM
@@ -942,6 +1093,27 @@ PRIORIDADE DE RESPOSTA:
 Tom: consultivo, especialista, direto. Máximo 6 linhas.`;
       break;
     }
+
+    case 'perguntas_sobre_plataforma':
+      prompt = `O usuário fez uma pergunta sobre como a plataforma BepeAI funciona, suas capacidades, limitações ou funcionalidades.
+Mensagem: "${input.mensagemUsuario}"
+
+Use sua base de conhecimento sobre a plataforma para responder com total honestidade:
+• Se a funcionalidade existe: explique como usar
+• Se a funcionalidade NÃO existe ainda: diga claramente, sem rodeios, e registre como feedback útil
+• Se for pergunta sobre documentos disponíveis: liste apenas os 5 tipos com 1 linha cada
+• Se for dúvida operacional (como corrigir campo, como gerar PDF, como recomeçar): explique o passo a passo
+
+NUNCA:
+• Prometa funcionalidades que não existem
+• Redirecione para criar um documento se o usuário claramente quer entender a plataforma primeiro
+• Use linguagem vaga como "podemos discutir opções" quando a resposta correta é "ainda não temos isso"
+
+Após responder, se houver contexto de documento em andamento, pergunte se quer continuar.
+Se não houver contexto, pergunte qual documento deseja criar ou se tem mais dúvidas.
+
+Tom: transparente, prestativo, direto. Máximo 8 linhas.`;
+      break;
   }
 
   // Sistema com contexto de documento injetado diretamente no system prompt
@@ -965,21 +1137,20 @@ Tom: consultivo, especialista, direto. Máximo 6 linhas.`;
   messages.push({ role: 'user', content: prompt });
 
   try {
-    const completion = await withRetry(
-      () => groq.chat.completions.create({
+    const { content, provider } = await llmCall(
+      {
         messages,
-        model: MODEL_CONVERSATIONAL,
+        taskType:    'conversational',
         temperature: input.situacao === 'chat_livre' ? 0.65 : 0.55,
-        max_tokens: input.situacao === 'chat_livre' ? 450 : 300,
-      }),
+        max_tokens:  input.situacao === 'chat_livre' ? 450 : 300,
+      },
       'gerarRespostaConversacional'
     );
 
-    const texto = completion.choices[0]?.message?.content?.trim() ?? null;
-    logger.debug({ situacao: input.situacao, turns: messages.length }, '[Groq] Resposta gerada');
-    return texto;
+    logger.debug({ situacao: input.situacao, turns: messages.length, provider }, '[LLM] Resposta gerada');
+    return content || null;
   } catch (err) {
-    logger.error({ err, situacao: input.situacao }, '[Groq] Erro na geração conversacional');
+    logger.error({ err, situacao: input.situacao }, '[LLM] Erro na geração conversacional');
     return null;
   }
 }

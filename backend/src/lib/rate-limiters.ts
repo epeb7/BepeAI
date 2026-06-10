@@ -29,3 +29,15 @@ export const uploadLimiter = rateLimit({
   keyGenerator: (req) =>
     req.headers['x-forwarded-for']?.toString().split(',')[0] ?? req.ip ?? 'unknown',
 });
+
+// 3 cadastros por IP a cada 60 minutos — evita criação em massa
+export const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: false,
+  message: { error: 'Limite de cadastros atingido. Aguarde 1 hora antes de tentar novamente.' },
+  keyGenerator: (req) =>
+    req.headers['x-forwarded-for']?.toString().split(',')[0] ?? req.ip ?? 'unknown',
+});

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useChat } from '../hooks/useChat';
 import { useHistory } from '../hooks/useHistory';
 import { useToast } from '../hooks/useToast';
@@ -8,9 +9,10 @@ import { TypingIndicator } from '../components/chat/TypingIndicator';
 import { ProgressBar } from '../components/chat/ProgressBar';
 import { ConversationSidebar } from '../components/chat/ConversationSidebar';
 import { ToastContainer } from '../components/ui/ToastContainer';
-import { PanelLeft, LogOut, PenSquare } from 'lucide-react';
+import { PanelLeft, LogOut, PenSquare, Settings } from 'lucide-react';
 import { LogoBrain } from '../components/logo/LogoBrain';
 import { authService } from '../services/auth.service';
+import { isAdminToken } from '../lib/utils';
 
 // ── Sugestões de boas-vindas ─────────────────────────────────
 const SUGGESTIONS = [
@@ -189,6 +191,9 @@ export function ChatBot() {
               </div>
             </div>
 
+            {/* Admin link — visível somente para role=admin */}
+            <AdminLink />
+
             {/* Logout */}
             <LogoutButton />
           </header>
@@ -318,6 +323,39 @@ export function ChatBot() {
 }
 
 // ── Sub-components ────────────────────────────────────────────
+
+function AdminLink() {
+  const navigate = useNavigate();
+  const token = localStorage.getItem('token');
+  if (!isAdminToken(token)) return null;
+
+  return (
+    <button
+      onClick={() => navigate('/admin')}
+      title="Painel de administração"
+      style={{
+        display: 'flex', alignItems: 'center', gap: '6px',
+        padding: '5px 10px', borderRadius: '8px', cursor: 'pointer',
+        background: 'transparent', border: '1px solid transparent',
+        color: 'hsl(250 60% 60%)', fontSize: '12px', fontWeight: 500,
+        transition: 'all 0.15s', marginRight: '2px',
+      }}
+      onMouseEnter={e => {
+        e.currentTarget.style.background = 'hsl(250 60% 18% / 0.5)';
+        e.currentTarget.style.borderColor = 'hsl(250 40% 30%)';
+        e.currentTarget.style.color = 'hsl(250 70% 72%)';
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.background = 'transparent';
+        e.currentTarget.style.borderColor = 'transparent';
+        e.currentTarget.style.color = 'hsl(250 60% 60%)';
+      }}
+    >
+      <Settings size={13} />
+      Admin
+    </button>
+  );
+}
 
 function LogoutButton() {
   const [confirming, setConfirming] = useState(false);

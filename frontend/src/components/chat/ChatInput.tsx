@@ -26,12 +26,20 @@ export const ChatInput = ({ onSend, disabled, workflowActive, workflowComplete, 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const canSend = !!input.trim() && !disabled;
+  // Pode enviar se há texto OU se há um arquivo anexado (mesmo sem texto).
+  const canSend = (!!input.trim() || attachments.length > 0) && !disabled;
 
   const handleSubmit = () => {
     if (!canSend) return;
-    onSend(input.trim());
+    // Sem texto mas com anexo: instrução padrão que faz a IA reconhecer o anexo
+    // e perguntar que tipo de documento criar a partir dele.
+    const text = input.trim() || (attachments.length > 0
+      ? 'Anexei um arquivo. Que tipo de documento posso criar a partir dele?'
+      : '');
+    if (!text) return;
+    onSend(text);
     setInput('');
+    setAttachments([]);  // anexos já estão associados à conversa no backend
     const ta = textareaRef.current;
     if (ta) { ta.style.height = 'auto'; }
     setTimeout(() => textareaRef.current?.focus(), 10);

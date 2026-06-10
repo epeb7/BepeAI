@@ -26,6 +26,11 @@ export interface WorkflowState {
   turnNumber: number;
   /** Tipo de documento pendente de confirmação antes de trocar o workflow ativo */
   pendingDocumentSwitch?: string | null;
+  /**
+   * Campos extraídos de um arquivo anexado que ainda não foram aplicados
+   * (pertencem a grupos futuros). Reaplicados a cada avanço de grupo.
+   */
+  pendingFileFields?: Record<string, string>;
 }
 
 export interface ApplyResult {

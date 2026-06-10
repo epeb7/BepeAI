@@ -86,14 +86,16 @@ export const login = async (req: Request, res: Response) => {
     return res.status(401).json({ error: 'Credenciais inválidas' });
   }
 
+  const role = dbUser?.role ?? 'admin'; // fallback env = admin
+
   const jti = uuidv4();
   const token = jwt.sign(
-    { userId, email, jti },
+    { userId, email, role, jti },
     env.JWT_SECRET,
     { expiresIn: env.JWT_EXPIRES_IN as `${number}${'s'|'m'|'h'|'d'}` }
   );
 
-  logger.info({ email, userId, jti }, '[Auth] Login bem-sucedido');
+  logger.info({ email, userId, role, jti }, '[Auth] Login bem-sucedido');
   return res.json({ success: true, token });
 };
 

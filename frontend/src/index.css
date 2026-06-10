@@ -151,3 +151,42 @@ body {
   outline: none;
   box-shadow: 0 0 0 2px hsl(var(--brand) / 0.45);
 }
+
+/* ── Mobile / touch fixes ──────────────────────────────────── */
+
+/* Previne zoom ao focar input no iOS (font-size mínimo 16px nos inputs) */
+input, textarea, select {
+  font-size: 16px;
+}
+
+/* Safe area para iPhone X+ (notch/home bar) */
+body {
+  padding-left:   env(safe-area-inset-left);
+  padding-right:  env(safe-area-inset-right);
+}
+
+/* Impede highlight azul/cinza ao tocar em botões no mobile */
+button, a {
+  -webkit-tap-highlight-color: transparent;
+  tap-highlight-color: transparent;
+}
+
+/* Garante que inputs não herdem aparência nativa do iOS */
+input[type="email"],
+input[type="password"],
+input[type="text"] {
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 12px; /* mesmo valor dos inputs do auth */
+}
+
+/* Autofill — sobrepõe o fundo amarelo do browser */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 100px hsl(218 20% 10%) inset !important;
+  -webkit-text-fill-color: hsl(215 18% 88%) !important;
+  caret-color: hsl(215 18% 88%);
+  transition: background-color 9999s ease-in-out 0s;
+}

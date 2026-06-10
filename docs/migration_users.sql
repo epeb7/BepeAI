@@ -19,20 +19,29 @@ CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
 
 -- ── 2. RLS — bloqueia acesso via anon key ─────────────────────
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "deny_anon_users" ON users FOR ALL USING (false);
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'deny_anon_users'
+  ) THEN
+    CREATE POLICY "deny_anon_users" ON users FOR ALL USING (false);
+  END IF;
+END $$;
 
 -- ── 3. Inserir usuários iniciais ──────────────────────────────
--- Admin principal
+-- Admin principal  (senha: %Bepe@2025!)
 INSERT INTO users (id, email, password_hash, name, role, active)
 VALUES (
   'admin-1',
   'admin@bepeai.com',
-  '$2a$12$1n/XHjnhQpfDmwgY71YNme3q8RRQc.fyYCpC6udgwIrAab14tEt4u',
+  '$2a$12$nA4UNmSPCO9mz29AR5bXNuUn3sAny7vbHNMRdtfcyDIvGKMGqmH1K',
   'Admin BepeAI',
   'admin',
   true
 )
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET
+  password_hash = EXCLUDED.password_hash,
+  role = 'admin',
+  active = true;
 
 -- Usuário de teste (senha: Teste@2025!)
 INSERT INTO users (email, password_hash, name, role, active)

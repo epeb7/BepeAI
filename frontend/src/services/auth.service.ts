@@ -8,12 +8,25 @@ export const authService = {
 
   logout: async () => {
     try {
-      // Tenta revogar o token no servidor (best-effort)
       await api.post('/auth/logout');
     } finally {
-      // Sempre limpa o estado local, mesmo se o servidor falhar
       localStorage.removeItem('token');
       window.dispatchEvent(new Event('auth:logout'));
     }
+  },
+
+  validateInvite: async (token: string): Promise<{ valid: boolean; email: string | null }> => {
+    const res = await api.get('/auth/invite/validate', { params: { token } });
+    return res.data;
+  },
+
+  register: async (payload: {
+    token: string;
+    name: string;
+    email: string;
+    password: string;
+  }): Promise<{ success: boolean; token: string }> => {
+    const res = await api.post('/auth/register', payload);
+    return res.data;
   },
 };

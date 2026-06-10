@@ -14,6 +14,7 @@ import pdfRoutes from './routes/pdf.routes';
 import authRoutes from './routes/auth.routes';
 import historyRoutes from './routes/history.routes';
 import uploadRoutes from './routes/upload.routes';
+import adminRoutes from './routes/admin.routes';
 import { errorMiddleware } from './middlewares/error.middleware';
 import { authMiddleware } from './middlewares/auth.middleware';
 import logger, { requestContext } from './lib/logger';
@@ -138,6 +139,7 @@ app.use('/api/chat',    authMiddleware, chatRoutes);
 app.use('/api/pdf',     authMiddleware, pdfRoutes);
 app.use('/api/history', authMiddleware, historyRoutes);
 app.use('/api/upload',  authMiddleware, uploadRoutes);
+app.use('/api/admin',         adminRoutes);
 
 // ── Error handler ─────────────────────────────────────────────
 app.use(errorMiddleware);
