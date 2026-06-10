@@ -70,7 +70,21 @@ CREATE INDEX IF NOT EXISTS idx_generated_docs_conversation
 CREATE INDEX IF NOT EXISTS idx_generated_docs_type
   ON generated_documents (document_type, created_at DESC);
 
--- ── 5. Blacklist de tokens JWT (logout e revogação) ───────────
+-- ── 5. Usuários da aplicação ──────────────────────────────────
+CREATE TABLE IF NOT EXISTS users (
+  id            TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  email         TEXT        NOT NULL UNIQUE,
+  password_hash TEXT        NOT NULL,
+  name          TEXT,
+  role          TEXT        NOT NULL DEFAULT 'user',  -- user | admin
+  active        BOOLEAN     NOT NULL DEFAULT TRUE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
+
+-- ── 6. Blacklist de tokens JWT (logout e revogação) ───────────
 CREATE TABLE IF NOT EXISTS token_blacklist (
   jti         TEXT        PRIMARY KEY,            -- JWT ID único por token
   expires_at  TIMESTAMPTZ NOT NULL,
@@ -80,7 +94,7 @@ CREATE TABLE IF NOT EXISTS token_blacklist (
 CREATE INDEX IF NOT EXISTS idx_token_blacklist_expires
   ON token_blacklist (expires_at);
 
--- ── 6. Limpeza automática via pg_cron (opcional) ──────────────
+-- ── 7. Limpeza automática via pg_cron (opcional) ──────────────
 -- Habilitar em: Supabase Dashboard → Database → Extensions → pg_cron
 -- Remove tokens expirados da blacklist diariamente às 03:00
 -- SELECT cron.schedule('cleanup-token-blacklist', '0 3 * * *',
@@ -89,7 +103,7 @@ CREATE INDEX IF NOT EXISTS idx_token_blacklist_expires
 -- SELECT cron.schedule('cleanup-workflow-sessions', '5 3 * * *',
 --   $$DELETE FROM workflow_sessions WHERE expires_at < NOW()$$);
 
--- ── 7. Row Level Security (RLS) ───────────────────────────────
+-- ── 8. Row Level Security (RLS) ───────────────────────────────
 -- Como o backend usa a service_role key, o RLS não bloqueia as
 -- queries do servidor. Habilitar RLS nas tabelas para bloquear
 -- acesso direto via anon key (ex: alguém chamando a API Supabase
@@ -100,6 +114,7 @@ ALTER TABLE conversations        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE conversation_turns   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE generated_documents  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE token_blacklist      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users                ENABLE ROW LEVEL SECURITY;
 
 -- Bloqueia TUDO via anon key — acesso só pelo backend (service_role bypassa RLS)
 CREATE POLICY "deny_anon_workflow_sessions"   ON workflow_sessions   FOR ALL USING (false);
@@ -107,6 +122,7 @@ CREATE POLICY "deny_anon_conversations"       ON conversations       FOR ALL USI
 CREATE POLICY "deny_anon_conversation_turns"  ON conversation_turns  FOR ALL USING (false);
 CREATE POLICY "deny_anon_generated_documents" ON generated_documents FOR ALL USING (false);
 CREATE POLICY "deny_anon_token_blacklist"     ON token_blacklist     FOR ALL USING (false);
+CREATE POLICY "deny_anon_users"               ON users               FOR ALL USING (false);
 
 -- ================================================================
 -- Verificação: rode após executar para confirmar as tabelas

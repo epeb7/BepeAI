@@ -13,6 +13,7 @@ interface Env {
   JWT_EXPIRES_IN: string;
   FRONTEND_URL: string;
   ALLOWED_ORIGINS: string[];
+  // Fallback de autenticação (usado quando tabela users não está disponível)
   ADMIN_EMAIL: string;
   ADMIN_PASSWORD_HASH: string | null;
   ADMIN_PASSWORD: string | null;
