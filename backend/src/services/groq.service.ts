@@ -29,13 +29,14 @@ const MODEL_CONVERSATIONAL = 'meta-llama/llama-4-scout-17b-16e-instruct';
 const GROQ_TIMEOUT_MS = 25_000;
 
 // ── Timeout wrapper ───────────────────────────────────────────
+// O timer é limpo assim que a promise original resolve/rejeita, evitando
+// timers pendentes acumulados sob carga.
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`[Groq] Timeout (${ms}ms): ${label}`)), ms)
-    ),
-  ]);
+  let timer: NodeJS.Timeout;
+  const timeout = new Promise<T>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`[Groq] Timeout (${ms}ms): ${label}`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 // ── Retry com backoff exponencial ────────────────────────────
@@ -543,45 +544,6 @@ Retorne JSON com exatamente estas chaves: { ${expectedKeys} }`;
 }
 
 // ============================================================
-// Extração de campo único — mantido para compatibilidade
-// ============================================================
-
-export async function extrairCampo(mensagem: string, campo: string): Promise<string | null> {
-  const texto = sanitizePromptInput(mensagem);
-
-  const manual = extrairCampoManual(texto, campo);
-  if (manual) return manual;
-
-  const systemPrompt = `Você é um extrator de dados documentais. Extraia APENAS o valor do campo solicitado da mensagem.
-Retorne SOMENTE o valor, sem explicações. Se não encontrar, retorne string vazia.
-Normalize: CNPJ/CPF sem pontuação, datas DD/MM/AAAA, valores sem R$ com ponto decimal.`;
-
-  try {
-    const completion = await withRetry(
-      () => groq.chat.completions.create({
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Campo: "${campo}"\nMensagem: "${texto}"` },
-        ],
-        model: MODEL_INTENT,
-        temperature: 0,
-        max_tokens: 100,
-      }),
-      'extrairCampo'
-    );
-
-    const valor = completion.choices[0]?.message?.content?.trim()
-      .replace(/^["']|["']$/g, '') ?? '';
-
-    if (!valor || isExtracaoFalha(valor)) return null;
-    return valor;
-  } catch (err) {
-    logger.error({ err, campo }, '[Groq] Erro na extração de campo único');
-    return null;
-  }
-}
-
-// ============================================================
 // Geração de resposta conversacional — dá voz humana à IA
 // ============================================================
 
@@ -603,6 +565,7 @@ export interface RespostaConversacionalInput {
   dadosDocumento?: Record<string, string>; // dados coletados, para responder perguntas livres
   clausulasDocumento?: string[];           // lista de cláusulas do documento (para chat pós-geração)
   historicoRecente?: Array<{ role: 'user' | 'assistant'; content: string }>; // últimos turns
+  contextoArquivos?: Array<{ nome: string; conteudo: string }>; // arquivos anexados à conversa
 }
 
 const SYSTEM_CONVERSACIONAL = `Você é a BepeAI, especialista em automação documental jurídica para empresas brasileiras.
@@ -724,7 +687,9 @@ REGRAS ABSOLUTAS
 function buildContextoDocumento(input: RespostaConversacionalInput): string {
   const dados = input.dadosDocumento ?? {};
   const temDados = Object.keys(dados).length > 0;
-  if (!temDados && !input.tipoDocumento) return '';
+  const arquivos = input.contextoArquivos ?? [];
+  const temArquivos = arquivos.length > 0;
+  if (!temDados && !input.tipoDocumento && !temArquivos) return '';
 
   const linhas: string[] = [];
   if (input.tipoDocumento) {
@@ -734,6 +699,13 @@ function buildContextoDocumento(input: RespostaConversacionalInput): string {
     linhas.push('DADOS JÁ COLETADOS (use para responder perguntas do usuário):');
     for (const [k, v] of Object.entries(dados)) {
       linhas.push(`  ${k}: ${v}`);
+    }
+  }
+  if (temArquivos) {
+    linhas.push('');
+    linhas.push('ARQUIVOS ANEXADOS PELO USUÁRIO (use o conteúdo abaixo para responder perguntas sobre os arquivos, resumir, extrair dados ou comparar):');
+    for (const a of arquivos) {
+      linhas.push(`\n━━━ Arquivo: ${a.nome} ━━━\n${a.conteudo}\n━━━ Fim de ${a.nome} ━━━`);
     }
   }
   return linhas.join('\n');

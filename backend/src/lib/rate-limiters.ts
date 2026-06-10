@@ -19,3 +19,13 @@ export const pdfLimiter = rateLimit({
   keyGenerator: (req) =>
     req.headers['x-forwarded-for']?.toString().split(',')[0] ?? req.ip ?? 'unknown',
 });
+
+export const uploadLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Limite de uploads atingido. Aguarde 1 minuto.' },
+  keyGenerator: (req) =>
+    req.headers['x-forwarded-for']?.toString().split(',')[0] ?? req.ip ?? 'unknown',
+});

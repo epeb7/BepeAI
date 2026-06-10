@@ -2,6 +2,14 @@ import { Request, Response, NextFunction } from 'express';
 import logger from '../lib/logger';
 
 export const errorMiddleware = (err: any, _req: Request, res: Response, _next: NextFunction) => {
+  // Erros do multer (upload) — sempre erro do cliente (400)
+  if (err?.name === 'MulterError') {
+    const msg = err.code === 'LIMIT_FILE_SIZE'
+      ? 'Arquivo excede o limite de 20 MB.'
+      : 'Falha no envio do arquivo.';
+    return res.status(400).json({ error: msg });
+  }
+
   const status  = err.status || err.statusCode || 500;
   const isProd  = process.env.NODE_ENV === 'production';
 

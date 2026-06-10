@@ -1,10 +1,30 @@
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Login } from './pages/Login';
-import { ChatBot } from './pages/ChatBot';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
+import { ErrorBoundary } from './components/ErrorBoundary';
+
+// Code splitting: cada rota vira um chunk separado, reduzindo o bundle inicial.
+const Login   = lazy(() => import('./pages/Login').then(m => ({ default: m.Login })));
+const ChatBot = lazy(() => import('./pages/ChatBot').then(m => ({ default: m.ChatBot })));
 
 const queryClient = new QueryClient();
+
+// Fallback exibido enquanto o chunk da rota carrega.
+function RouteFallback() {
+  return (
+    <div style={{
+      minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'hsl(220 18% 10%)',
+    }}>
+      <div style={{
+        width: '28px', height: '28px', borderRadius: '50%',
+        border: '3px solid hsl(220 14% 22%)', borderTopColor: 'hsl(250 70% 60%)',
+        animation: 'app-spin 0.8s linear infinite',
+      }} />
+      <style>{`@keyframes app-spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
 
 // Componente interno que tem acesso ao navigate do router
 function AuthGuard({ children }: { children: React.ReactNode }) {
@@ -36,17 +56,21 @@ function App() {
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AuthGuard>
-          <Routes>
-            <Route path="/login"     element={<Login onLogin={() => setToken(localStorage.getItem('token'))} />} />
-            <Route path="/dashboard" element={token ? <ChatBot /> : <Navigate to="/login" replace />} />
-            <Route path="/"          element={<Navigate to="/dashboard" replace />} />
-          </Routes>
-        </AuthGuard>
-      </BrowserRouter>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <AuthGuard>
+            <Suspense fallback={<RouteFallback />}>
+              <Routes>
+                <Route path="/login"     element={<Login onLogin={() => setToken(localStorage.getItem('token'))} />} />
+                <Route path="/dashboard" element={token ? <ChatBot /> : <Navigate to="/login" replace />} />
+                <Route path="/"          element={<Navigate to="/dashboard" replace />} />
+              </Routes>
+            </Suspense>
+          </AuthGuard>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 

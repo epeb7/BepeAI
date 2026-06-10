@@ -30,6 +30,7 @@ export function ChatBot() {
   const {
     messages, isLoading, latestProgress, conversationId,
     sendUserMessage, downloadPDF, resetConversation, loadFromHistory,
+    adoptConversationId,
   } = useChat(refresh);
 
   const { toasts, toast, dismiss } = useToast();
@@ -296,6 +297,8 @@ export function ChatBot() {
                 disabled={isLoading}
                 workflowActive={workflowActive}
                 workflowComplete={workflowComplete}
+                conversationId={conversationId}
+                onConversationCreated={adoptConversationId}
               />
               <p style={{
                 textAlign: 'center', marginTop: '8px',

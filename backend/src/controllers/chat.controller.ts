@@ -20,6 +20,7 @@ import { extrairMultiplosCampos, gerarRespostaConversacional, RespostaConversaci
 import { detectIntent, extractFieldToEdit } from '../services/intent.service';
 import { workflows } from '../workflows/definitions';
 import { ensureConversation, logTurn, completeConversation, getConversationDetail } from '../services/conversation.logger';
+import { getConversationFiles } from '../services/file.service';
 
 // ============================================================
 // Helpers de domínio
@@ -73,8 +74,18 @@ function findStepByHint(hint: string, workflowDef: { steps: Array<{ field: strin
 }
 
 function isSaudacao(texto: string): boolean {
-  const saudacoes = ['oi', 'olá', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'oie', 'e aí', 'opa', 'hey', 'hello', 'eae', 'ei'];
-  return saudacoes.some(s => texto.toLowerCase().includes(s));
+  const saudacoes = ['oi', 'olá', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'oie', 'e aí', 'e ai', 'opa', 'hey', 'hello', 'eae', 'ei'];
+  // Match por palavra inteira — evita falsos positivos como "ei" dentro de "anexei"
+  // ou "ola" dentro de "isolado". Saudações são curtas e devem ser tokens próprios.
+  const tokens = texto.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').split(/\s+/);
+  const saudacoesNorm = saudacoes.map(s => s.normalize('NFD').replace(/[̀-ͯ]/g, ''));
+  // Frases compostas ("bom dia") checadas no texto completo com boundary
+  const textoNorm = texto.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  return saudacoesNorm.some(s =>
+    s.includes(' ')
+      ? new RegExp(`\\b${s}\\b`).test(textoNorm)
+      : tokens.includes(s)
+  );
 }
 
 const CLAUSULAS_DOCUMENTO: Record<string, string[]> = {
@@ -368,12 +379,14 @@ async function recoverStateFromConversation(
 async function resposta(
   input: RespostaConversacionalInput,
   fallback: string,
-  state?: WorkflowState
+  state?: WorkflowState,
+  contextoArquivos?: Array<{ nome: string; conteudo: string }>
 ): Promise<string> {
   const inputComContexto: RespostaConversacionalInput = {
     ...input,
     dadosDocumento: input.dadosDocumento ?? (state?.data && Object.keys(state.data).length > 0 ? state.data : undefined),
     tipoDocumento:  input.tipoDocumento  ?? state?.workflowName ?? undefined,
+    contextoArquivos: input.contextoArquivos ?? (contextoArquivos && contextoArquivos.length > 0 ? contextoArquivos : undefined),
   };
   const gerado = await gerarRespostaConversacional(inputComContexto);
   return gerado ?? fallback;
@@ -414,6 +427,17 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     if (recovered) state = recovered;
   }
 
+  // Sincroniza o conversationId do frontend com o state.
+  // Cenário típico: o usuário anexou um arquivo (criando uma conversa nova) enquanto
+  // o servidor ainda tinha em memória o state de uma sessão anterior sem workflow.
+  // Sem isso, o backend buscaria arquivos/histórico da conversa errada.
+  // Só adota quando não há workflow ativo — não interrompe uma coleta em andamento.
+  if (frontendConvId && !state.workflowName && state.conversationId !== frontendConvId) {
+    state = { ...state, conversationId: frontendConvId };
+    await setState(userId, state);
+    logger.info({ userId, frontendConvId }, '[Chat] conversationId do frontend adotado no state');
+  }
+
   const isComplete = isWorkflowComplete(state);
   const intent = detectIntent(message, isComplete);
 
@@ -428,6 +452,29 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     await setState(userId, state);
   }
   const turnNumber = (state.turnNumber ?? 0) + 1;
+
+  // ── Contexto de arquivos anexados (lazy) ─────────────────────
+  // O texto extraído (até ~60 KB) só é buscado quando o branch realmente
+  // vai usá-lo (chat livre / perguntas). Branches como CANCEL/HELP/CONFIRM
+  // não pagam essa query. O resultado é memoizado por request.
+  let _arquivosCache: Array<{ nome: string; conteudo: string }> | null = null;
+  const carregarArquivos = async (): Promise<Array<{ nome: string; conteudo: string }>> => {
+    if (_arquivosCache !== null) return _arquivosCache;
+    // Prioriza o conversationId que o frontend indicou (onde o arquivo foi anexado),
+    // caindo para o do state. Cobre o caso de anexar arquivo com workflow ativo.
+    const convId = frontendConvId ?? state.conversationId;
+    if (!convId) { _arquivosCache = []; return _arquivosCache; }
+    try {
+      const arquivos = await getConversationFiles(userId, convId);
+      _arquivosCache = arquivos
+        .filter(f => f.extractedText && f.extractedText.trim().length > 0)
+        .map(f => ({ nome: f.originalFilename, conteudo: f.extractedText! }));
+    } catch (err) {
+      logger.warn({ err, conversationId: convId }, '[Chat] Falha ao carregar arquivos da conversa');
+      _arquivosCache = [];
+    }
+    return _arquivosCache;
+  };
 
   // Helper para logar o turno ao final de qualquer branch e atualizar turnNumber no state
   const logAndAdvanceTurn = (userMsg: string, aiResp: string, groupId?: string, extracted?: Record<string,string>, saved?: string[]) => {
@@ -678,7 +725,9 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
         historicoRecente,
         clausulasDocumento: clausulas,
       },
-      'O documento está pronto para geração. Para tirar dúvidas sobre os dados coletados, pergunte livremente. Para gerar o PDF, clique no botão abaixo ou diga "gerar".'
+      'O documento está pronto para geração. Para tirar dúvidas sobre os dados coletados, pergunte livremente. Para gerar o PDF, clique no botão abaixo ou diga "gerar".',
+      state,
+      await carregarArquivos()
     );
     logAndAdvanceTurn(message, textoLivre);
     return res.json(buildResponse(textoLivre, state, true, { readyToDownload: true }));
@@ -720,7 +769,9 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
         mensagemUsuario: message,
         dadosDocumento: {},
       },
-      'Posso ajudar com documentos jurídicos profissionais. Informe o tipo desejado:\n\n• **contrato** — Prestação de Serviços\n• **proposta** — Comercial\n• **orçamento**\n• **relatório** — Final\n• **NDA** — Acordo de Confidencialidade'
+      'Posso ajudar com documentos jurídicos profissionais. Informe o tipo desejado:\n\n• **contrato** — Prestação de Serviços\n• **proposta** — Comercial\n• **orçamento**\n• **relatório** — Final\n• **NDA** — Acordo de Confidencialidade',
+      state,
+      await carregarArquivos()
     );
     logAndAdvanceTurn(message, textoDefault);
     return res.json(buildResponse(textoDefault, state));
@@ -851,6 +902,10 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     ? (FIELD_LABELS[campoPendentePadrao] ?? campoPendentePadrao.replace(/_/g, ' '))
     : undefined;
 
+  // Arquivos só importam quando o usuário está perguntando algo (explicar_campo);
+  // numa extração normal de campos, não carrega o texto (economiza tokens/latência).
+  const arquivosParaResposta = situacao === 'explicar_campo' ? await carregarArquivos() : undefined;
+
   const textoResposta = await resposta(
     {
       situacao,
@@ -865,7 +920,8 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
       campoCorrendo:   fieldPadraoLabel,
     },
     fallback,
-    state
+    state,
+    arquivosParaResposta
   );
 
   // ── Log turn no Supabase (fire-and-forget) ─────────────────

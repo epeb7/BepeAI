@@ -139,6 +139,12 @@ export function useChat(onConversationChange?: () => void) {
     URL.revokeObjectURL(url);
   }, []);
 
+  // Adota um conversationId criado fora do fluxo de chat (ex.: upload de arquivo
+  // antes da primeira mensagem). Garante que a próxima mensagem use a mesma conversa.
+  const adoptConversationId = useCallback((id: string) => {
+    setConversationId(prev => prev ?? id);
+  }, []);
+
   const resetConversation = useCallback(async () => {
     try { await api.post('/chat/reset'); } catch { /* best-effort */ }
     setMessages([]);
@@ -198,5 +204,6 @@ export function useChat(onConversationChange?: () => void) {
     downloadPDF,
     resetConversation,
     loadFromHistory,
+    adoptConversationId,
   };
 }

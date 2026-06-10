@@ -13,17 +13,21 @@ import chatRoutes from './routes/chat.routes';
 import pdfRoutes from './routes/pdf.routes';
 import authRoutes from './routes/auth.routes';
 import historyRoutes from './routes/history.routes';
+import uploadRoutes from './routes/upload.routes';
 import { errorMiddleware } from './middlewares/error.middleware';
 import { authMiddleware } from './middlewares/auth.middleware';
-import logger from './lib/logger';
+import logger, { requestContext } from './lib/logger';
 import { supabaseEnabled } from './lib/supabase';
 
 const app = express();
 
 // ── Request correlation ID ────────────────────────────────────
+// O requestId é gerado e armazenado no AsyncLocalStorage, ficando disponível
+// para todos os logs emitidos durante o ciclo de vida do request.
 app.use((req: express.Request & { requestId?: string }, _res, next) => {
-  req.requestId = uuidv4();
-  next();
+  const requestId = uuidv4();
+  req.requestId = requestId;
+  requestContext.run({ requestId }, () => next());
 });
 
 // ── Request logging ──────────────────────────────────────────
@@ -133,6 +137,7 @@ app.use('/api/auth',    authRoutes);
 app.use('/api/chat',    authMiddleware, chatRoutes);
 app.use('/api/pdf',     authMiddleware, pdfRoutes);
 app.use('/api/history', authMiddleware, historyRoutes);
+app.use('/api/upload',  authMiddleware, uploadRoutes);
 
 // ── Error handler ─────────────────────────────────────────────
 app.use(errorMiddleware);

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo } from 'react';
 import { FileText, Loader2, AlertCircle, RotateCcw } from 'lucide-react';
 import type { Message } from '../../hooks/useChat';
 import { useTypewriter } from '../../hooks/useChat';
@@ -115,7 +115,7 @@ function relativeTime(date: Date): string {
 }
 
 // ── Main ─────────────────────────────────────────────────────
-export function ChatMessage({ message, onDownloadPDF }: ChatMessageProps) {
+function ChatMessageInner({ message, onDownloadPDF }: ChatMessageProps) {
   const isUser = message.sender === 'user';
   const [generating, setGenerating] = useState(false);
   const [pdfError,   setPdfError]   = useState(false);
@@ -243,3 +243,7 @@ export function ChatMessage({ message, onDownloadPDF }: ChatMessageProps) {
     </div>
   );
 }
+
+// memo: numa conversa longa, digitar/animar a última mensagem não re-renderiza
+// todas as anteriores. Só re-renderiza quando a própria message muda de referência.
+export const ChatMessage = memo(ChatMessageInner);

@@ -13,25 +13,28 @@ export class SupabaseSessionStore<T> implements SessionStore<T> {
 
   async get(key: string): Promise<T | null> {
     if (!supabase) return null;
-    try {
-      const { data, error } = await supabase
-        .from('workflow_sessions')
-        .select('state, expires_at')
-        .eq('id', key)
-        .single();
+    const { data, error } = await supabase
+      .from('workflow_sessions')
+      .select('state, expires_at')
+      .eq('id', key)
+      .single();
 
-      if (error || !data) return null;
+    // PGRST116 = nenhuma linha encontrada → ausência legítima (retorna null).
+    // Qualquer outro erro (rede, 5xx, timeout) é PROPAGADO para o
+    // ResilientSessionStore acionar o fallback em memória.
+    if (error) {
+      if (error.code === 'PGRST116') return null;
+      logger.error({ error, key }, '[SupabaseStore] Erro em get');
+      throw error;
+    }
+    if (!data) return null;
 
-      if (new Date(data.expires_at) < new Date()) {
-        await this.delete(key);
-        return null;
-      }
-
-      return data.state as T;
-    } catch (err) {
-      logger.error({ err, key }, '[SupabaseStore] Erro em get');
+    if (new Date(data.expires_at) < new Date()) {
+      await this.delete(key);
       return null;
     }
+
+    return data.state as T;
   }
 
   async set(key: string, value: T, ttlSeconds?: number): Promise<void> {
