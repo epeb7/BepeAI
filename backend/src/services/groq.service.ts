@@ -713,6 +713,14 @@ export interface RespostaConversacionalInput {
   clausulasDocumento?: string[];           // lista de cláusulas do documento (para chat pós-geração)
   historicoRecente?: Array<{ role: 'user' | 'assistant'; content: string }>; // últimos turns
   contextoArquivos?: Array<{ nome: string; conteudo: string }>; // arquivos anexados à conversa
+  documentosAnteriores?: Array<{                                // documentos concluídos anteriores
+    titulo: string | null;
+    tipo: string | null;
+    dados: Record<string, string>;
+    dataAtualizacao: string;
+  }>;
+  memoriaUsuario?: string;  // bloco pré-formatado de dados recorrentes do usuário
+  tomPreferido?: string;    // instrução de tom pré-formatada
 }
 
 const SYSTEM_CONVERSACIONAL = `Você é a BepeAI, especialista em automação documental jurídica para empresas brasileiras.
@@ -898,15 +906,27 @@ REGRAS ABSOLUTAS
 • Durante a coleta: responda perguntas do usuário e SEMPRE retorne à coleta na mesma mensagem`;
 
 
+const NOMES_WORKFLOW: Record<string, string> = {
+  contrato:           'Contrato de Prestação de Serviços',
+  proposta_comercial: 'Proposta Comercial',
+  orcamento:          'Orçamento',
+  relatorio_final:    'Relatório Final',
+  nda:                'Acordo de Confidencialidade (NDA)',
+};
+
 // Monta bloco de contexto dos dados coletados — injetado em todos os prompts
 function buildContextoDocumento(input: RespostaConversacionalInput): string {
   const dados = input.dadosDocumento ?? {};
   const temDados = Object.keys(dados).length > 0;
   const arquivos = input.contextoArquivos ?? [];
   const temArquivos = arquivos.length > 0;
-  if (!temDados && !input.tipoDocumento && !temArquivos) return '';
+  const docsAnteriores = input.documentosAnteriores ?? [];
+  const temDocsAnteriores = docsAnteriores.length > 0;
+
+  if (!temDados && !input.tipoDocumento && !temArquivos && !temDocsAnteriores) return '';
 
   const linhas: string[] = [];
+
   if (input.tipoDocumento) {
     linhas.push(`DOCUMENTO EM ELABORAÇÃO: ${input.tipoDocumento}`);
   }
@@ -921,6 +941,31 @@ function buildContextoDocumento(input: RespostaConversacionalInput): string {
     linhas.push('ARQUIVOS ANEXADOS PELO USUÁRIO (use o conteúdo abaixo para responder perguntas sobre os arquivos, resumir, extrair dados ou comparar):');
     for (const a of arquivos) {
       linhas.push(`\n━━━ Arquivo: ${a.nome} ━━━\n${a.conteudo}\n━━━ Fim de ${a.nome} ━━━`);
+    }
+  }
+  if (temDocsAnteriores) {
+    linhas.push('');
+    linhas.push('DOCUMENTOS ANTERIORES DO USUÁRIO (use para reutilizar dados como empresa, CNPJ, endereço quando o usuário pedir ou quando fizerem sentido para o documento atual):');
+    for (const doc of docsAnteriores) {
+      const nomeDoc = (doc.tipo && NOMES_WORKFLOW[doc.tipo]) ? NOMES_WORKFLOW[doc.tipo] : (doc.tipo ?? 'Documento');
+      const titulo  = doc.titulo ?? nomeDoc;
+      const data    = new Date(doc.dataAtualizacao).toLocaleDateString('pt-BR');
+      linhas.push(`\n── ${titulo} (${nomeDoc} — ${data}) ──`);
+      // Inclui campos mais relevantes para reutilização (empresa, CNPJ, responsável, endereço)
+      const CAMPOS_REUTILIZAVEIS = [
+        'empresa_contratante', 'cnpj_contratante', 'responsavel_contratante',
+        'empresa_contratada',  'cnpj_contratada',  'responsavel_contratada',
+        'emitente_empresa',    'emitente_cnpj',    'emitente_responsavel',    'emitente_endereco',
+        'empresa_emitente',    'cnpj_emitente',    'responsavel_emitente',    'endereco_emitente',
+        'cliente_nome',        'cliente_cnpj_cpf',
+        'cliente_empresa',     'cliente_cnpj',     'cliente_responsavel',
+        'parte_divulgadora',   'cnpj_divulgadora', 'parte_receptora',         'cnpj_receptora',
+        'empresa_relatorio',   'cnpj_relatorio',   'responsavel_relatorio',
+        'foro_comarca',        'cidade_assinatura',
+      ];
+      for (const campo of CAMPOS_REUTILIZAVEIS) {
+        if (doc.dados[campo]) linhas.push(`  ${campo}: ${doc.dados[campo]}`);
+      }
     }
   }
   return linhas.join('\n');
@@ -1180,19 +1225,29 @@ Tom: transparente, prestativo, direto. Máximo 8 linhas.`;
       break;
   }
 
-  // Sistema com contexto de documento injetado diretamente no system prompt
-  // para garantir que a IA sempre tem os dados disponíveis
-  const systemComContexto = contextoDocumento
-    ? `${SYSTEM_CONVERSACIONAL}\n\n${contextoDocumento}`
-    : SYSTEM_CONVERSACIONAL;
+  // Data atual — injetada em cada chamada para que a IA calcule datas corretamente
+  const dataHoje = new Date().toLocaleDateString('pt-BR', {
+    weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
+  });
 
-  // Monta a lista de mensagens — chat_livre usa multi-turn com histórico
+  // Monta blocos de contexto dinâmico — cada bloco só aparece se tiver conteúdo
+  const blocosExtras: string[] = [
+    `DATA ATUAL: ${dataHoje}`,
+    ...(input.tomPreferido   ? [input.tomPreferido]   : []),
+    ...(input.memoriaUsuario ? [input.memoriaUsuario] : []),
+    ...(contextoDocumento    ? [contextoDocumento]    : []),
+  ];
+
+  const systemComContexto = `${SYSTEM_CONVERSACIONAL}\n\n${blocosExtras.join('\n\n')}`;
+
+  // Monta a lista de mensagens — histórico injetado em todas as situações para
+  // garantir continuidade: a IA sabe o que já foi dito mesmo ao responder perguntas
+  // sobre campos, hesitações ou plataforma no meio de um workflow.
   const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
     { role: 'system', content: systemComContexto },
   ];
 
-  if (input.situacao === 'chat_livre' && input.historicoRecente?.length) {
-    // Injeta histórico recente para continuidade conversacional
+  if (input.historicoRecente?.length) {
     for (const turn of input.historicoRecente) {
       messages.push({ role: turn.role, content: turn.content });
     }

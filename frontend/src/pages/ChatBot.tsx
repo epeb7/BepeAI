@@ -107,11 +107,11 @@ export function ChatBot() {
     <>
       <style>{`
         @keyframes chatFadeIn {
-          from { opacity: 0; transform: translateY(6px); }
+          from { opacity: 0; transform: translateY(8px); }
           to   { opacity: 1; transform: translateY(0); }
         }
         .chat-area-fade {
-          animation: chatFadeIn 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+          animation: chatFadeIn 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
         }
         .chat-area-fading {
           opacity: 0;
@@ -119,10 +119,18 @@ export function ChatBot() {
           transition: opacity 0.12s ease, transform 0.12s ease;
           pointer-events: none;
         }
-        .bepe-new-btn-header:hover {
-          background: hsl(250 40% 20%) !important;
-          border-color: hsl(250 50% 36%) !important;
-          color: hsl(250 60% 72%) !important;
+        .bepe-scroll-area {
+          scrollbar-width: thin;
+          scrollbar-color: hsl(220 12% 20%) transparent;
+        }
+        .bepe-scroll-area::-webkit-scrollbar { width: 4px; }
+        .bepe-scroll-area::-webkit-scrollbar-thumb {
+          background: hsl(220 12% 22%);
+          border-radius: 99px;
+        }
+        @keyframes blink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
         }
       `}</style>
 
@@ -152,97 +160,85 @@ export function ChatBot() {
         {/* ── Main column ─────────────────────────────────────── */}
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
 
-          {/* Header */}
+          {/* Header — minimalista estilo Claude */}
           <header style={{
             display: 'flex', alignItems: 'center',
-            padding: '0 16px 0 20px', height: '52px', flexShrink: 0,
-            background: 'hsl(220 18% 10%)',
-            borderBottom: '1px solid hsl(220 14% 16%)',
+            padding: '0 14px', height: '50px', flexShrink: 0,
+            background: 'hsl(218 20% 8%)',
+            borderBottom: '1px solid hsl(220 14% 13%)',
           }}>
-            {/* Toggle sidebar */}
             <HeaderIconBtn onClick={() => setSidebar(v => !v)} title="Histórico de conversas">
-              <PanelLeft size={15} />
+              <PanelLeft size={16} />
             </HeaderIconBtn>
 
-            {/* Nova conversa — só visível quando sidebar fechada */}
             {!sidebar && (
               <HeaderIconBtn onClick={handleNew} title="Nova conversa (Ctrl+Shift+O)">
-                <PenSquare size={14} />
+                <PenSquare size={15} />
               </HeaderIconBtn>
             )}
 
             {/* Brand */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '9px', marginLeft: '8px', flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '6px', flex: 1 }}>
               <div style={{
-                width: '28px', height: '28px', borderRadius: '8px', flexShrink: 0,
-                background: 'linear-gradient(135deg, hsl(250 85% 50%), hsl(215 85% 52%))',
+                width: '26px', height: '26px', borderRadius: '8px', flexShrink: 0,
+                background: 'linear-gradient(135deg, hsl(250 85% 52%), hsl(215 85% 54%))',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 2px 10px hsl(250 85% 50% / 0.30)',
+                boxShadow: '0 2px 8px hsl(250 85% 50% / 0.28)',
               }}>
-                <LogoBrain size={14} className="text-white" />
+                <LogoBrain size={13} className="text-white" />
               </div>
-              <div>
-                <span className="brand-text" style={{ fontSize: '13px', fontWeight: 700, letterSpacing: '-0.01em' }}>
-                  BepeAI
-                </span>
-                <span style={{ display: 'block', fontSize: '10px', color: 'hsl(215 10% 40%)', lineHeight: 1, marginTop: '1px' }}>
-                  Automação documental
-                </span>
-              </div>
+              <span className="brand-text" style={{ fontSize: '14px', fontWeight: 700, letterSpacing: '-0.02em' }}>
+                BepeAI
+              </span>
             </div>
 
-            {/* Admin link — visível somente para role=admin */}
             <AdminLink />
-
-            {/* Logout */}
             <LogoutButton />
           </header>
 
           {/* Progress */}
           {showProgress && <ProgressBar progress={latestProgress!} />}
 
-          {/* Messages — animated on conversation switch */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '0' }}>
+          {/* Messages */}
+          <div className="bepe-scroll-area" style={{ flex: 1, overflowY: 'auto' }}>
             <div
               key={fadeKey}
               className={fading ? 'chat-area-fading' : 'chat-area-fade'}
-              style={{ maxWidth: '680px', margin: '0 auto', padding: '32px 20px 24px' }}
+              style={{ maxWidth: '720px', margin: '0 auto', padding: '40px 24px 32px' }}
             >
               {/* ── Welcome / empty state ──────────────────── */}
               {messages.length === 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: '48px' }}>
-                  {/* Hero icon */}
-                  <div style={{ position: 'relative', marginBottom: '24px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: '40px' }}>
+                  <div style={{ position: 'relative', marginBottom: '28px' }}>
                     <div style={{
-                      position: 'absolute', inset: '-8px', borderRadius: '24px', opacity: 0.35,
-                      background: 'radial-gradient(ellipse, hsl(250 85% 50% / 0.35), transparent 70%)',
+                      position: 'absolute', inset: '-20px', borderRadius: '50%',
+                      background: 'radial-gradient(ellipse, hsl(250 85% 50% / 0.10), transparent 70%)',
                     }} />
                     <div style={{
-                      position: 'relative', width: '56px', height: '56px', borderRadius: '16px',
-                      background: 'linear-gradient(135deg, hsl(250 85% 50%), hsl(215 85% 52%))',
+                      position: 'relative', width: '64px', height: '64px', borderRadius: '50%',
+                      background: 'linear-gradient(135deg, hsl(250 85% 50%), hsl(215 85% 54%))',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      boxShadow: '0 8px 32px hsl(250 85% 50% / 0.30)',
+                      boxShadow: '0 8px 40px hsl(250 85% 50% / 0.28)',
                     }}>
-                      <LogoBrain size={28} className="text-white" />
+                      <LogoBrain size={32} className="text-white" />
                     </div>
                   </div>
 
                   <h2 style={{
-                    fontSize: '20px', fontWeight: 700, letterSpacing: '-0.02em',
-                    marginBottom: '8px', color: 'hsl(215 18% 88%)',
+                    fontSize: '22px', fontWeight: 700, letterSpacing: '-0.025em',
+                    marginBottom: '10px', color: 'hsl(215 18% 90%)', textAlign: 'center',
                   }}>
-                    Como posso ajudar?
+                    Olá! Como posso ajudar?
                   </h2>
                   <p style={{
-                    fontSize: '13px', color: 'hsl(215 10% 46%)', textAlign: 'center',
-                    maxWidth: '340px', lineHeight: 1.65, marginBottom: '36px',
+                    fontSize: '14px', color: 'hsl(215 10% 48%)', textAlign: 'center',
+                    maxWidth: '380px', lineHeight: 1.7, marginBottom: '40px',
                   }}>
-                    Diga qual documento precisa criar. Conduzo a coleta de dados via conversa
-                    e entrego o PDF pronto para assinar.
+                    Crio contratos, propostas, relatórios e outros documentos profissionais
+                    via conversa — entrego o PDF pronto para assinar.
                   </p>
 
-                  {/* Suggestion cards */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', width: '100%', maxWidth: '480px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', width: '100%', maxWidth: '520px' }}>
                     {SUGGESTIONS.map((s, idx) => (
                       <SuggestionCard
                         key={s.prompt} label={s.label} desc={s.desc}
@@ -253,11 +249,9 @@ export function ChatBot() {
                     ))}
                   </div>
 
-                  {/* Credibility bar */}
                   <div style={{
-                    display: 'flex', alignItems: 'center', gap: '16px', marginTop: '40px',
-                    padding: '10px 20px', borderRadius: '12px',
-                    background: 'hsl(220 16% 12%)', border: '1px solid hsl(220 14% 18%)',
+                    display: 'flex', alignItems: 'center', gap: '20px', marginTop: '44px',
+                    flexWrap: 'wrap', justifyContent: 'center',
                   }}>
                     {[
                       { icon: '⚡', text: 'Geração em segundos' },
@@ -265,8 +259,8 @@ export function ChatBot() {
                       { icon: '📋', text: 'Válido juridicamente' },
                     ].map(item => (
                       <div key={item.text} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '12px' }}>{item.icon}</span>
-                        <span style={{ fontSize: '11px', color: 'hsl(215 10% 46%)' }}>{item.text}</span>
+                        <span style={{ fontSize: '13px' }}>{item.icon}</span>
+                        <span style={{ fontSize: '12px', color: 'hsl(215 10% 40%)' }}>{item.text}</span>
                       </div>
                     ))}
                   </div>
@@ -290,13 +284,14 @@ export function ChatBot() {
             </div>
           </div>
 
-          {/* Input area */}
+          {/* Input area — flutuante estilo Claude */}
           <div style={{
-            flexShrink: 0, padding: '12px 20px 16px',
-            background: 'hsl(220 18% 10%)',
-            borderTop: '1px solid hsl(220 14% 16%)',
+            flexShrink: 0,
+            padding: '8px 24px 18px',
+            background: 'hsl(218 20% 8%)',
+            borderTop: '1px solid hsl(220 14% 13%)',
           }}>
-            <div style={{ maxWidth: '680px', margin: '0 auto' }}>
+            <div style={{ maxWidth: '720px', margin: '0 auto' }}>
               <ChatInput
                 onSend={sendUserMessage}
                 disabled={isLoading}
@@ -307,7 +302,7 @@ export function ChatBot() {
               />
               <p style={{
                 textAlign: 'center', marginTop: '8px',
-                fontSize: '10px', color: 'hsl(215 8% 30%)',
+                fontSize: '10.5px', color: 'hsl(215 8% 26%)',
               }}>
                 BepeAI pode cometer erros. Revise documentos importantes antes de assinar.
               </p>
@@ -439,28 +434,31 @@ function SuggestionCard({
       onClick={onClick}
       style={{
         textAlign: 'left', padding: '14px 16px', borderRadius: '14px', cursor: 'pointer',
-        background: 'hsl(220 16% 13%)', border: '1px solid hsl(220 14% 20%)',
+        background: 'hsl(220 18% 11%)',
+        border: '1px solid hsl(220 14% 18%)',
         transition: 'all 0.18s', display: 'block', width: '100%',
         ...style,
       }}
       onMouseEnter={e => {
-        e.currentTarget.style.background = 'hsl(220 16% 16%)';
-        e.currentTarget.style.borderColor = 'hsl(250 50% 38%)';
-        e.currentTarget.style.boxShadow = '0 0 0 1px hsl(250 85% 60% / 0.08), 0 4px 16px hsl(250 85% 10% / 0.3)';
+        e.currentTarget.style.background = 'hsl(220 18% 14%)';
+        e.currentTarget.style.borderColor = 'hsl(250 50% 36%)';
+        e.currentTarget.style.transform = 'translateY(-1px)';
+        e.currentTarget.style.boxShadow = '0 4px 20px hsl(250 85% 10% / 0.4)';
       }}
       onMouseLeave={e => {
-        e.currentTarget.style.background = 'hsl(220 16% 13%)';
-        e.currentTarget.style.borderColor = 'hsl(220 14% 20%)';
+        e.currentTarget.style.background = 'hsl(220 18% 11%)';
+        e.currentTarget.style.borderColor = 'hsl(220 14% 18%)';
+        e.currentTarget.style.transform = 'translateY(0)';
         e.currentTarget.style.boxShadow = 'none';
       }}
     >
       <div style={{
-        fontSize: '12px', fontWeight: 600, color: 'hsl(215 16% 78%)',
-        marginBottom: '4px', letterSpacing: '-0.01em',
+        fontSize: '12.5px', fontWeight: 600, color: 'hsl(215 16% 80%)',
+        marginBottom: '5px', letterSpacing: '-0.01em',
       }}>
         {label}
       </div>
-      <div style={{ fontSize: '11px', color: 'hsl(215 8% 42%)', lineHeight: 1.5 }}>
+      <div style={{ fontSize: '11.5px', color: 'hsl(215 8% 40%)', lineHeight: 1.55 }}>
         {desc}
       </div>
     </button>

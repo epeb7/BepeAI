@@ -118,30 +118,30 @@ export const ChatInput = ({ onSend, disabled, workflowActive, workflowComplete, 
       {chips.length > 0 && !disabled && (
         <div style={{
           display: 'flex', flexWrap: 'wrap', gap: '6px',
-          marginBottom: '8px',
+          marginBottom: '10px',
         }}>
           {chips.map(chip => (
             <button
               key={chip}
               onClick={() => quickSend(chip)}
               style={{
-                padding: '4px 10px', borderRadius: '20px', cursor: 'pointer',
-                background: 'hsl(220 16% 14%)',
-                border: '1px solid hsl(220 14% 22%)',
-                color: 'hsl(215 10% 54%)',
-                fontSize: '11.5px', fontWeight: 500,
+                padding: '5px 12px', borderRadius: '99px', cursor: 'pointer',
+                background: 'hsl(220 18% 11%)',
+                border: '1px solid hsl(220 14% 19%)',
+                color: 'hsl(215 10% 56%)',
+                fontSize: '12px', fontWeight: 500,
                 transition: 'all 0.14s',
                 whiteSpace: 'nowrap',
               }}
               onMouseEnter={e => {
-                e.currentTarget.style.background    = 'hsl(250 30% 18%)';
-                e.currentTarget.style.borderColor   = 'hsl(250 40% 32%)';
-                e.currentTarget.style.color         = 'hsl(250 60% 70%)';
+                e.currentTarget.style.background    = 'hsl(250 30% 16%)';
+                e.currentTarget.style.borderColor   = 'hsl(250 40% 30%)';
+                e.currentTarget.style.color         = 'hsl(250 60% 72%)';
               }}
               onMouseLeave={e => {
-                e.currentTarget.style.background    = 'hsl(220 16% 14%)';
-                e.currentTarget.style.borderColor   = 'hsl(220 14% 22%)';
-                e.currentTarget.style.color         = 'hsl(215 10% 54%)';
+                e.currentTarget.style.background    = 'hsl(220 18% 11%)';
+                e.currentTarget.style.borderColor   = 'hsl(220 14% 19%)';
+                e.currentTarget.style.color         = 'hsl(215 10% 56%)';
               }}
             >
               {chip}
@@ -208,29 +208,34 @@ export const ChatInput = ({ onSend, disabled, workflowActive, workflowComplete, 
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
         style={{
-        display: 'flex', alignItems: 'flex-end', gap: '8px',
-        padding: '10px 12px 10px 12px', borderRadius: '16px',
-        background: dragOver ? 'hsl(250 30% 15%)' : 'hsl(220 16% 13%)',
-        border: `1px solid ${dragOver ? 'hsl(250 60% 50%)' : focused ? 'hsl(250 60% 44%)' : 'hsl(220 14% 20%)'}`,
-        boxShadow: focused ? '0 0 0 3px hsl(250 85% 60% / 0.10)' : 'none',
-        transition: 'border-color 0.15s, box-shadow 0.15s, background 0.15s',
-      }}>
+          display: 'flex', alignItems: 'flex-end', gap: '8px',
+          padding: '12px 12px 12px 14px', borderRadius: '18px',
+          background: dragOver ? 'hsl(250 30% 13%)' : 'hsl(220 18% 11%)',
+          border: `1.5px solid ${dragOver ? 'hsl(250 60% 46%)' : focused ? 'hsl(250 50% 40%)' : 'hsl(220 14% 18%)'}`,
+          boxShadow: focused
+            ? '0 0 0 4px hsl(250 85% 60% / 0.08), 0 2px 16px hsl(250 85% 8% / 0.3)'
+            : '0 2px 8px hsl(218 20% 4% / 0.4)',
+          transition: 'border-color 0.18s, box-shadow 0.18s, background 0.15s',
+        }}
+      >
         {/* botão de anexar */}
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={disabled || uploading}
           title="Anexar arquivo (PDF, DOCX, TXT, CSV, código)"
           style={{
-            width: '32px', height: '32px', borderRadius: '10px', flexShrink: 0,
+            width: '34px', height: '34px', borderRadius: '10px', flexShrink: 0,
             border: 'none', background: 'transparent',
             cursor: (disabled || uploading) ? 'not-allowed' : 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            opacity: (disabled || uploading) ? 0.4 : 1, transition: 'all 0.15s',
+            opacity: (disabled || uploading) ? 0.35 : 0.7, transition: 'all 0.15s',
           }}
+          onMouseEnter={e => { if (!disabled && !uploading) e.currentTarget.style.opacity = '1'; }}
+          onMouseLeave={e => { if (!disabled && !uploading) e.currentTarget.style.opacity = '0.7'; }}
         >
           {uploading
-            ? <Loader2 size={16} color="hsl(250 60% 68%)" className="spin" />
-            : <Paperclip size={16} color="hsl(215 10% 54%)" />}
+            ? <Loader2 size={17} color="hsl(250 60% 68%)" className="spin" />
+            : <Paperclip size={17} color="hsl(215 10% 56%)" />}
         </button>
 
         <textarea
@@ -240,14 +245,14 @@ export const ChatInput = ({ onSend, disabled, workflowActive, workflowComplete, 
           onKeyDown={handleKeyDown}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          placeholder={workflowActive ? 'Responda aqui… (Enter para enviar)' : 'Escreva uma mensagem…'}
+          placeholder={workflowActive ? 'Responda aqui… (Enter para enviar)' : 'Mensagem para BepeAI…'}
           disabled={disabled}
           rows={1}
           style={{
             flex: 1, background: 'transparent', border: 'none', outline: 'none',
-            resize: 'none', fontFamily: 'inherit', fontSize: '13.5px', lineHeight: 1.6,
-            color: 'hsl(215 16% 82%)', minHeight: '22px', maxHeight: '148px',
-            opacity: disabled ? 0.5 : 1,
+            resize: 'none', fontFamily: 'inherit', fontSize: '14px', lineHeight: 1.65,
+            color: 'hsl(215 16% 84%)', minHeight: '24px', maxHeight: '160px',
+            opacity: disabled ? 0.45 : 1, padding: '4px 0',
           }}
         />
 
@@ -256,19 +261,19 @@ export const ChatInput = ({ onSend, disabled, workflowActive, workflowComplete, 
           disabled={!canSend}
           title={canSend ? 'Enviar (Enter)' : ''}
           style={{
-            width: '32px', height: '32px', borderRadius: '10px', flexShrink: 0,
+            width: '34px', height: '34px', borderRadius: '10px', flexShrink: 0,
             border: 'none', cursor: canSend ? 'pointer' : 'not-allowed',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             background: canSend
-              ? 'linear-gradient(135deg, hsl(250 85% 55%), hsl(215 85% 52%))'
-              : 'hsl(220 14% 20%)',
-            boxShadow: canSend ? '0 2px 10px hsl(250 85% 50% / 0.30)' : 'none',
+              ? 'linear-gradient(135deg, hsl(250 85% 56%), hsl(215 85% 54%))'
+              : 'hsl(220 14% 18%)',
+            boxShadow: canSend ? '0 2px 12px hsl(250 85% 50% / 0.32)' : 'none',
             transition: 'all 0.15s',
-            transform: canSend ? 'scale(1)' : 'scale(0.92)',
-            opacity: canSend ? 1 : 0.4,
+            transform: canSend ? 'scale(1)' : 'scale(0.9)',
+            opacity: canSend ? 1 : 0.35,
           }}
         >
-          <ArrowUp size={14} color="white" />
+          <ArrowUp size={15} color="white" strokeWidth={2.5} />
         </button>
       </div>
     </div>

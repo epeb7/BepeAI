@@ -259,6 +259,44 @@ export async function renameConversation(
   return result ?? false;
 }
 
+export interface RecentDocument {
+  id: string;
+  title: string | null;
+  workflowType: string | null;
+  finalData: Record<string, string>;
+  updatedAt: string;
+}
+
+// Retorna os últimos N documentos concluídos do usuário com seus dados finais.
+// Usado para injetar contexto de documentos anteriores no system prompt.
+export async function getRecentDocuments(
+  userId: string,
+  limit = 5
+): Promise<RecentDocument[]> {
+  return await safe('getRecentDocuments', async () => {
+    const { data, error } = await supabase!
+      .from('conversations')
+      .select('id, title, workflow_type, final_data, updated_at')
+      .eq('user_id', userId)
+      .eq('status', 'completed')
+      .not('final_data', 'is', null)
+      .order('updated_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+
+    return (data ?? [])
+      .filter(r => r.final_data && typeof r.final_data === 'object')
+      .map(r => ({
+        id:           r.id,
+        title:        r.title ?? null,
+        workflowType: r.workflow_type ?? null,
+        finalData:    r.final_data as Record<string, string>,
+        updatedAt:    r.updated_at,
+      }));
+  }) ?? [];
+}
+
 export async function deleteConversation(
   conversationId: string,
   userId: string

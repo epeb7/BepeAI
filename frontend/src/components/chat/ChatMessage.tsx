@@ -87,18 +87,18 @@ function ExampleBlock({ example }: { example: string }) {
 // ── AI avatar ────────────────────────────────────────────────
 function AiAvatar() {
   return (
-    <div style={{ flexShrink: 0, marginRight: '10px', marginTop: '2px' }}>
+    <div style={{ flexShrink: 0, marginRight: '14px', marginTop: '1px' }}>
       <div style={{
-        width: '26px', height: '26px', borderRadius: '8px',
-        background: 'linear-gradient(135deg, hsl(250 85% 46%), hsl(215 85% 50%))',
+        width: '30px', height: '30px', borderRadius: '50%',
+        background: 'linear-gradient(135deg, hsl(250 85% 50%), hsl(215 85% 54%))',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        boxShadow: '0 2px 8px hsl(250 85% 50% / 0.25)',
+        boxShadow: '0 2px 8px hsl(250 85% 50% / 0.3)',
+        flexShrink: 0,
       }}>
-        {/* Mini brain icon */}
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
-          <circle cx="8" cy="8" r="2.5" fill="white" opacity="0.9" />
-          <circle cx="8" cy="8" r="5.5" stroke="white" strokeWidth="0.8" opacity="0.35" />
-          <circle cx="8" cy="8" r="7.2" stroke="white" strokeWidth="0.5" opacity="0.15" />
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+          <circle cx="8" cy="8" r="2.5" fill="white" opacity="0.95" />
+          <circle cx="8" cy="8" r="5.5" stroke="white" strokeWidth="1" opacity="0.4" />
+          <circle cx="8" cy="8" r="7.2" stroke="white" strokeWidth="0.6" opacity="0.18" />
         </svg>
       </div>
     </div>
@@ -154,21 +154,24 @@ function ChatMessageInner({ message, onDownloadPDF }: ChatMessageProps) {
   // ── User bubble ──────────────────────────────────────────
   if (isUser) {
     return (
-      <div className="animate-slide-up" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '4px' }}>
+      <div className="animate-slide-up" style={{
+        display: 'flex', justifyContent: 'flex-end',
+        marginBottom: '20px', paddingLeft: '20%',
+      }}>
         <div>
           <div style={{
-            maxWidth: '480px', padding: '10px 15px', borderRadius: '16px',
-            borderBottomRightRadius: '4px',
-            background: 'linear-gradient(135deg, hsl(250 70% 46%), hsl(215 75% 48%))',
-            color: 'hsl(215 20% 95%)', fontSize: '13.5px', lineHeight: 1.65,
-            boxShadow: '0 2px 12px hsl(250 85% 20% / 0.35)',
+            padding: '11px 16px', borderRadius: '18px',
+            borderBottomRightRadius: '5px',
+            background: 'hsl(250 60% 28%)',
+            border: '1px solid hsl(250 50% 38% / 0.5)',
+            color: 'hsl(215 20% 94%)', fontSize: '14px', lineHeight: 1.65,
             wordBreak: 'break-word',
           }}>
             <RenderText text={textToShow} />
           </div>
           <div style={{
-            textAlign: 'right', marginTop: '4px', fontSize: '10px',
-            color: 'hsl(215 8% 34%)', paddingRight: '2px',
+            textAlign: 'right', marginTop: '5px', fontSize: '10px',
+            color: 'hsl(215 8% 30%)', paddingRight: '4px',
           }}>
             {time}
           </div>
@@ -177,17 +180,17 @@ function ChatMessageInner({ message, onDownloadPDF }: ChatMessageProps) {
     );
   }
 
-  // ── AI bubble ────────────────────────────────────────────
+  // ── AI message (Claude-style: open, no bubble box) ───────
   return (
-    <div className="animate-slide-up" style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '8px' }}>
+    <div className="animate-slide-up" style={{
+      display: 'flex', justifyContent: 'flex-start',
+      marginBottom: '24px',
+    }}>
       <AiAvatar />
-      <div style={{ maxWidth: '540px', minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {/* Text — no bubble, just styled text directly */}
         <div style={{
-          padding: '12px 16px', borderRadius: '16px',
-          borderTopLeftRadius: '4px',
-          background: 'hsl(220 16% 15%)',
-          border: '1px solid hsl(220 14% 21%)',
-          color: 'hsl(215 12% 70%)', fontSize: '13.5px', lineHeight: 1.7,
+          color: 'hsl(215 14% 76%)', fontSize: '14px', lineHeight: 1.75,
           wordBreak: 'break-word',
         }}>
           <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
@@ -203,40 +206,40 @@ function ChatMessageInner({ message, onDownloadPDF }: ChatMessageProps) {
           </p>
 
           {message.exampleBlock && <ExampleBlock example={message.exampleBlock} />}
-
-          {canPDF && (
-            <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid hsl(220 14% 20%)' }}>
-              <button
-                onClick={handlePDF}
-                disabled={generating}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '7px',
-                  padding: '8px 14px', borderRadius: '9px', cursor: generating ? 'not-allowed' : 'pointer',
-                  background: pdfError ? 'hsl(0 40% 16%)' : 'hsl(250 40% 22%)',
-                  border: `1px solid ${pdfError ? 'hsl(0 50% 32%)' : 'hsl(250 40% 32%)'}`,
-                  color: pdfError ? 'hsl(0 68% 66%)' : 'hsl(250 60% 76%)',
-                  fontSize: '12px', fontWeight: 500, opacity: generating ? 0.7 : 1,
-                  transition: 'all 0.15s',
-                }}
-                onMouseEnter={e => !generating && !pdfError && (
-                  (e.currentTarget.style.background = 'hsl(250 40% 26%)')
-                )}
-                onMouseLeave={e => !pdfError && (
-                  (e.currentTarget.style.background = 'hsl(250 40% 22%)')
-                )}
-              >
-                {generating
-                  ? <><Loader2 size={13} style={{ animation: 'spin 0.7s linear infinite' }} /> Gerando PDF...</>
-                  : pdfError
-                    ? <><AlertCircle size={13} /> Erro — Tentar novamente <RotateCcw size={11} /></>
-                    : <><FileText size={13} /> Gerar PDF</>
-                }
-              </button>
-            </div>
-          )}
         </div>
 
-        <div style={{ marginTop: '4px', marginLeft: '2px', fontSize: '10px', color: 'hsl(215 8% 32%)' }}>
+        {canPDF && (
+          <div style={{ marginTop: '16px' }}>
+            <button
+              onClick={handlePDF}
+              disabled={generating}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '7px',
+                padding: '9px 16px', borderRadius: '10px', cursor: generating ? 'not-allowed' : 'pointer',
+                background: pdfError ? 'hsl(0 40% 14%)' : 'hsl(250 40% 18%)',
+                border: `1px solid ${pdfError ? 'hsl(0 50% 28%)' : 'hsl(250 40% 30%)'}`,
+                color: pdfError ? 'hsl(0 68% 66%)' : 'hsl(250 60% 78%)',
+                fontSize: '12.5px', fontWeight: 500, opacity: generating ? 0.7 : 1,
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => !generating && !pdfError && (
+                (e.currentTarget.style.background = 'hsl(250 40% 24%)')
+              )}
+              onMouseLeave={e => !pdfError && (
+                (e.currentTarget.style.background = 'hsl(250 40% 18%)')
+              )}
+            >
+              {generating
+                ? <><Loader2 size={13} style={{ animation: 'spin 0.7s linear infinite' }} /> Gerando PDF...</>
+                : pdfError
+                  ? <><AlertCircle size={13} /> Erro — Tentar novamente <RotateCcw size={11} /></>
+                  : <><FileText size={13} /> Gerar PDF</>
+              }
+            </button>
+          </div>
+        )}
+
+        <div style={{ marginTop: '8px', fontSize: '10px', color: 'hsl(215 8% 28%)' }}>
           BepeAI · {time}
         </div>
       </div>

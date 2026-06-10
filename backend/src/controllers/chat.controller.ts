@@ -19,8 +19,9 @@ import { WorkflowState } from '../services/workflow.service';
 import { extrairMultiplosCampos, extrairCamposDeDocumento, gerarRespostaConversacional, RespostaConversacionalInput } from '../services/groq.service';
 import { detectIntent, extractFieldToEdit } from '../services/intent.service';
 import { workflows } from '../workflows/definitions';
-import { ensureConversation, logTurn, completeConversation, getConversationDetail } from '../services/conversation.logger';
+import { ensureConversation, logTurn, completeConversation, getConversationDetail, getRecentDocuments } from '../services/conversation.logger';
 import { getConversationFiles } from '../services/file.service';
+import { getMemoria, getUserTone, formatarMemoriaParaPrompt, formatarTomParaPrompt, memorizarDocumento } from '../services/memory.service';
 
 // ============================================================
 // Helpers de domínio
@@ -377,20 +378,47 @@ async function recoverStateFromConversation(
   }
 }
 
+// ── Helper: busca últimos N turns do histórico de uma conversa ──
+async function buscarHistorico(
+  conversationId: string | undefined,
+  userId: string,
+  maxTurns = 20
+): Promise<Array<{ role: 'user' | 'assistant'; content: string }>> {
+  if (!conversationId) return [];
+  try {
+    const detail = await getConversationDetail(conversationId, userId);
+    if (!detail?.turns?.length) return [];
+    return detail.turns.slice(-maxTurns).flatMap(t => [
+      { role: 'user'      as const, content: t.userMessage },
+      { role: 'assistant' as const, content: t.aiResponse  },
+    ]);
+  } catch {
+    return [];
+  }
+}
+
 // ── Helper: gera resposta via IA com fallback hardcoded ────────
-// Injeta automaticamente dadosDocumento do state quando disponível,
-// garantindo que a IA sempre tem os dados coletados como contexto.
+// Injeta automaticamente dadosDocumento, histórico, arquivos, documentos anteriores,
+// memória adaptativa do usuário e tom preferido.
 async function resposta(
   input: RespostaConversacionalInput,
   fallback: string,
   state?: WorkflowState,
-  contextoArquivos?: Array<{ nome: string; conteudo: string }>
+  contextoArquivos?: Array<{ nome: string; conteudo: string }>,
+  historicoRecente?: Array<{ role: 'user' | 'assistant'; content: string }>,
+  documentosAnteriores?: RespostaConversacionalInput['documentosAnteriores'],
+  memoriaUsuario?: string,
+  tomPreferido?: string
 ): Promise<string> {
   const inputComContexto: RespostaConversacionalInput = {
     ...input,
-    dadosDocumento: input.dadosDocumento ?? (state?.data && Object.keys(state.data).length > 0 ? state.data : undefined),
-    tipoDocumento:  input.tipoDocumento  ?? state?.workflowName ?? undefined,
-    contextoArquivos: input.contextoArquivos ?? (contextoArquivos && contextoArquivos.length > 0 ? contextoArquivos : undefined),
+    dadosDocumento:       input.dadosDocumento       ?? (state?.data && Object.keys(state.data).length > 0 ? state.data : undefined),
+    tipoDocumento:        input.tipoDocumento        ?? state?.workflowName ?? undefined,
+    contextoArquivos:     input.contextoArquivos     ?? (contextoArquivos && contextoArquivos.length > 0 ? contextoArquivos : undefined),
+    historicoRecente:     input.historicoRecente     ?? (historicoRecente?.length ? historicoRecente : undefined),
+    documentosAnteriores: input.documentosAnteriores ?? (documentosAnteriores?.length ? documentosAnteriores : undefined),
+    memoriaUsuario:       input.memoriaUsuario       ?? (memoriaUsuario || undefined),
+    tomPreferido:         input.tomPreferido         ?? (tomPreferido   || undefined),
   };
   const gerado = await gerarRespostaConversacional(inputComContexto);
   return gerado ?? fallback;
@@ -457,6 +485,32 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
   }
   const turnNumber = (state.turnNumber ?? 0) + 1;
 
+  // ── Contexto carregado em paralelo — uma única rodada de I/O por request ──────────
+  // historicoConversa : até 20 turns da conversa atual
+  // docsAnterioresRaw : últimos 5 documentos concluídos (para sugerir campos)
+  // memorias          : campos recorrentes do usuário (empresa, CNPJ, foro…)
+  // tomPreferido      : estilo de resposta escolhido pelo usuário
+  const [historicoConversa, docsAnterioresRaw, memorias, tomUsuario] = await Promise.all([
+    buscarHistorico(state.conversationId ?? undefined, userId, 20),
+    getRecentDocuments(userId, 5),
+    getMemoria(userId, 20),
+    getUserTone(userId),
+  ]);
+
+  // Exclui a conversa atual dos documentos anteriores (evita duplicidade com dadosDocumento)
+  const docsAnteriores = docsAnterioresRaw
+    .filter(d => d.id !== state.conversationId)
+    .map(d => ({
+      titulo:          d.title,
+      tipo:            d.workflowType,
+      dados:           d.finalData,
+      dataAtualizacao: d.updatedAt,
+    }));
+
+  // Blocos pré-formatados para o system prompt
+  const memoriaUsuario = formatarMemoriaParaPrompt(memorias);
+  const tomPreferido   = formatarTomParaPrompt(tomUsuario);
+
   // ── Contexto de arquivos anexados (lazy) ─────────────────────
   // O texto extraído (até ~60 KB) só é buscado quando o branch realmente
   // vai usá-lo (chat livre / perguntas). Branches como CANCEL/HELP/CONFIRM
@@ -511,7 +565,7 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
       const texto = await resposta(
         { situacao: 'inicio_workflow', tipoDocumento: nomeTipo, grupAtual: grupLabel, totalGrupos },
         `Iniciando coleta de dados para o seu documento. Serão **${totalGrupos} etapas** no total.\n\n${getCurrentGroupQuestion(state)}`,
-        state
+        state, undefined, historicoConversa, docsAnteriores, memoriaUsuario, tomPreferido
       );
       logTurn({ userId, conversationId: state.conversationId!, turnNumber: 1, userMessage: message, aiResponse: texto });
       return res.json(buildResponse(texto, state));
@@ -563,7 +617,7 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     const textoCancel = await resposta(
       { situacao: 'cancelado' },
       'Conversa reiniciada. Qual documento você precisa criar?\n\n• **Contrato** de Prestação de Serviços\n• **Proposta** Comercial\n• **Orçamento**\n• **Relatório** Final\n• **Acordo de Confidencialidade** (NDA)',
-      state
+      state, undefined, historicoConversa, docsAnteriores, memoriaUsuario, tomPreferido
     );
     logAndAdvanceTurn(message, textoCancel);
     await deleteState(userId);
@@ -583,7 +637,7 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
       '5. Para recomeçar do zero: diga **"cancelar"**\n' +
       '6. Para tirar dúvidas sobre campos ou cláusulas, pergunte a qualquer momento\n' +
       '7. Ao terminar, clique em **Gerar PDF** ou diga "gerar"',
-      state
+      state, undefined, historicoConversa, docsAnteriores, memoriaUsuario, tomPreferido
     );
     logAndAdvanceTurn(message, textoHelp);
     return res.json(buildResponse(textoHelp, state));
@@ -618,7 +672,7 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     const textoConfirm = await resposta(
       { situacao: 'confirmado' },
       'Documento finalizado. Clique em **Gerar PDF** para baixar o arquivo.',
-      state
+      state, undefined, historicoConversa, docsAnteriores, memoriaUsuario, tomPreferido
     );
     logAndAdvanceTurn(message, textoConfirm);
     return res.json(buildResponse(textoConfirm, state, false, { readyToDownload: true }));
@@ -648,7 +702,7 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
       const textoNoField = await resposta(
         { situacao: 'campo_nao_encontrado', campoCorrendo: message },
         `Não identifiquei qual campo corrigir.\n\nCampos disponíveis para correção:\n${camposColetados || '(nenhum coletado ainda)'}\n\nDiga, por exemplo: "corrigir empresa" ou "alterar cnpj".`,
-        state
+        state, undefined, historicoConversa, docsAnteriores, memoriaUsuario, tomPreferido
       );
       logAndAdvanceTurn(message, textoNoField);
       return res.json(buildResponse(textoNoField, state));
@@ -667,7 +721,7 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
       const textoNotFound = await resposta(
         { situacao: 'campo_nao_encontrado', campoCorrendo: fieldHint },
         `Não encontrei o campo **"${fieldHint}"** neste documento.\n\nCampos que podem ser corrigidos:\n${camposDisponiveis || '(nenhum preenchido ainda)'}\n\nTente: "corrigir empresa", "corrigir cnpj", "corrigir endereço".`,
-        state
+        state, undefined, historicoConversa, docsAnteriores, memoriaUsuario, tomPreferido
       );
       logAndAdvanceTurn(message, textoNotFound);
       return res.json(buildResponse(textoNotFound, state));
@@ -705,27 +759,13 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
       ? `Correção de **${fieldLabel}** iniciada.\nValor atual: **${formatarValorResumo(step.field, valorAnterior)}**\n\nInforme o novo valor:`
       : `Correção de **${fieldLabel}** iniciada.\n\n${getCurrentGroupQuestion(state)}`;
 
-    const textoEdit = await resposta(contextoEdicao, fallbackEdicao, state);
+    const textoEdit = await resposta(contextoEdicao, fallbackEdicao, state, undefined, historicoConversa, docsAnteriores, memoriaUsuario, tomPreferido);
     logTurn({ userId, conversationId: state.conversationId!, turnNumber, userMessage: message, aiResponse: textoEdit });
     return res.json(buildResponse(textoEdit, state));
   }
 
   // ── WORKFLOW COMPLETO — chat consultivo sobre o documento ────
   if (isComplete) {
-    let historicoRecente: Array<{ role: 'user' | 'assistant'; content: string }> = [];
-    if (state.conversationId) {
-      try {
-        const detail = await getConversationDetail(state.conversationId, userId);
-        if (detail?.turns) {
-          const ultimos = detail.turns.slice(-6);
-          historicoRecente = ultimos.flatMap(t => [
-            { role: 'user' as const,      content: t.userMessage },
-            { role: 'assistant' as const, content: t.aiResponse  },
-          ]);
-        }
-      } catch { /* histórico opcional */ }
-    }
-
     const clausulas = state.workflowName
       ? (CLAUSULAS_DOCUMENTO[state.workflowName] ?? [])
       : [];
@@ -736,12 +776,12 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
         tipoDocumento:      state.workflowName ?? undefined,
         dadosDocumento:     state.data,
         mensagemUsuario:    message,
-        historicoRecente,
         clausulasDocumento: clausulas,
       },
       'O documento está pronto para geração. Para tirar dúvidas sobre os dados coletados, pergunte livremente. Para gerar o PDF, clique no botão abaixo ou diga "gerar".',
       state,
-      await carregarArquivos()
+      await carregarArquivos(),
+      historicoConversa, docsAnteriores, memoriaUsuario, tomPreferido
     );
     logAndAdvanceTurn(message, textoLivre);
     return res.json(buildResponse(textoLivre, state, true, { readyToDownload: true }));
@@ -809,7 +849,7 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
         const textoCompleto = await resposta(
           { situacao: 'workflow_completo', tipoDocumento: tipo, resumoFinal: resumo },
           `Extraí os dados do arquivo. **Revise com atenção** — a leitura automática pode conter erros:\n\n${resumo}\n\nSe algo estiver errado, diga "corrigir [campo]". Se estiver tudo certo, gere o PDF.`,
-          state
+          state, undefined, historicoConversa, docsAnteriores, memoriaUsuario, tomPreferido
         );
         logTurn({ userId, conversationId: state.conversationId!, turnNumber: 1, userMessage: message, aiResponse: textoCompleto, savedFields: preenchidosDeArquivo });
         return res.json(buildResponse(textoCompleto, state, true, { readyToDownload: true }));
@@ -828,7 +868,7 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
             nextQuestion: getCurrentGroupQuestion(state) ?? undefined,
           },
           `Analisei o arquivo e já preenchi: **${labels.join(', ')}**.\n\n${getCurrentGroupQuestion(state) ?? ''}`,
-          state
+          state, undefined, historicoConversa
         );
         logTurn({ userId, conversationId: state.conversationId!, turnNumber: 1, userMessage: message, aiResponse: textoPre, savedFields: preenchidosDeArquivo });
         return res.json(buildResponse(textoPre, state));
@@ -838,7 +878,7 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
       const textoInit = await resposta(
         { situacao: 'inicio_workflow', tipoDocumento: tipo, grupAtual: grupLabel, totalGrupos },
         `Iniciando coleta de dados para o seu documento. Serão **${totalGrupos} etapas** no total.\n\n${getCurrentGroupQuestion(state)}`,
-        state
+        state, undefined, historicoConversa, docsAnteriores, memoriaUsuario, tomPreferido
       );
       logTurn({ userId, conversationId: state.conversationId!, turnNumber: 1, userMessage: message, aiResponse: textoInit });
       return res.json(buildResponse(textoInit, state));
@@ -866,7 +906,8 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
       },
       'Posso ajudar com documentos jurídicos profissionais. Informe o tipo desejado:\n\n• **contrato** — Prestação de Serviços\n• **proposta** — Comercial\n• **orçamento**\n• **relatório** — Final\n• **NDA** — Acordo de Confidencialidade',
       state,
-      await carregarArquivos()
+      await carregarArquivos(),
+      historicoConversa, docsAnteriores, memoriaUsuario, tomPreferido
     );
     logAndAdvanceTurn(message, textoDefault);
     return res.json(buildResponse(textoDefault, state));
@@ -966,11 +1007,12 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     const textoFinal = await resposta(
       { situacao: 'workflow_completo', resumoFinal: resumo, tipoDocumento: state.workflowName ?? undefined },
       `✅ **Coleta concluída!**\n\n${resumo}\n\nClique em **Gerar PDF** para baixar seu documento, ou diga **"corrigir [campo]"** para ajustar algo.`,
-      state
+      state, undefined, historicoConversa, docsAnteriores, memoriaUsuario, tomPreferido
     );
     // Persistência fire-and-forget — não atrasa a resposta
     void logTurn({ userId, conversationId: state.conversationId!, turnNumber, userMessage: message, aiResponse: textoFinal, groupId: currentGroup.id, extractedFields: extracted, savedFields });
     void completeConversation(state.conversationId!, state.data);
+    void memorizarDocumento(userId, state.data);
     return res.json(buildResponse(textoFinal, state, true, { readyToDownload: true }));
   }
 
@@ -1045,7 +1087,8 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     },
     fallback,
     state,
-    arquivosParaResposta
+    arquivosParaResposta,
+    historicoConversa, docsAnteriores
   );
 
   // Persistência fire-and-forget — não atrasa a resposta ao usuário

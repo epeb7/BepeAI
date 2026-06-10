@@ -20,7 +20,10 @@ interface Env {
   SUPABASE_URL: string | null;
   SUPABASE_SERVICE_ROLE_KEY: string | null;
   SUPABASE_ANON_KEY: string | null;
+  // LLM providers — todos opcionais exceto GROQ_API_KEY
   CEREBRAS_API_KEY: string | null;
+  OPENAI_API_KEY: string | null;
+  OPENROUTER_API_KEY: string | null;
   RESEND_API_KEY: string | null;
   RESEND_FROM: string;
   LOG_LEVEL: string;
@@ -90,8 +93,10 @@ function load(): Env {
     SUPABASE_URL: optional('SUPABASE_URL'),
     SUPABASE_SERVICE_ROLE_KEY: optional('SUPABASE_SERVICE_ROLE_KEY'),
     SUPABASE_ANON_KEY: optional('SUPABASE_ANON_KEY'),
-    CEREBRAS_API_KEY: optional('CEREBRAS_API_KEY'),
-    RESEND_API_KEY:   optional('RESEND_API_KEY'),
+    CEREBRAS_API_KEY:   optional('CEREBRAS_API_KEY'),
+    OPENAI_API_KEY:     optional('OPENAI_API_KEY'),
+    OPENROUTER_API_KEY: optional('OPENROUTER_API_KEY'),
+    RESEND_API_KEY:     optional('RESEND_API_KEY'),
     RESEND_FROM:      process.env.RESEND_FROM ?? 'BepeAI <noreply@bepeai.com>',
     LOG_LEVEL: process.env.LOG_LEVEL ?? (process.env.NODE_ENV === 'production' ? 'info' : 'debug'),
   };
