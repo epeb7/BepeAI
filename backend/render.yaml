@@ -15,7 +15,7 @@ services:
     rootDir: backend
     region: oregon           # us-west-2 — mais próximo do Brasil disponível no plano free
 
-    buildCommand: npm ci --include=dev && npm run build
+    buildCommand: npm ci && npm run build
     startCommand: node dist/server.js
 
     # Plano free — trocar para "starter" ($7/mês) para eliminar o sleep

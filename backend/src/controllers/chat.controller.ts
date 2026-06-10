@@ -395,11 +395,13 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
   let state = await getState(userId);
 
   const headerConvId = req.headers['x-conversation-id'] as string | undefined;
+  const bodyConvId   = req.body?.conversationId as string | undefined;
+  const frontendConvId = headerConvId ?? bodyConvId ?? null;
 
   // Se há estado ativo mas o frontend não enviou conversationId (nova aba, reload, nova sessão),
   // isso indica que o usuário começou uma nova conversa sem passar pelo /reset.
   // Limpa o estado para não contaminar a nova conversa com dados anteriores.
-  if (state.workflowName && !headerConvId) {
+  if (state.workflowName && !frontendConvId) {
     await deleteState(userId);
     state = await getState(userId);
     logger.info({ userId }, '[Chat] Estado órfão limpo — nova sessão sem conversationId');
@@ -407,8 +409,8 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
 
   // Se o servidor não tem estado (reiniciou) mas o frontend tem um conversationId ativo,
   // tenta reconstruir o estado a partir do Supabase
-  if (!state.workflowName && headerConvId) {
-    const recovered = await recoverStateFromConversation(userId, headerConvId);
+  if (!state.workflowName && frontendConvId) {
+    const recovered = await recoverStateFromConversation(userId, frontendConvId);
     if (recovered) state = recovered;
   }
 
