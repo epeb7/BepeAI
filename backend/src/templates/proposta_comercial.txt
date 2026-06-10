@@ -1,6 +1,6 @@
 PROPOSTA COMERCIAL
 
-EMITENTE: {{emitente_empresa}}, pessoa jurídica de direito privado, inscrita no CNPJ/MF sob o nº {{emitente_cnpj}}, com sede em {{emitente_endereco}}, neste ato representada por {{emitente_responsavel}}, {{emitente_cargo}}, e-mail: {{emitente_email}}, telefone: {{emitente_telefone}}.
+EMITENTE: {{emitente_empresa}}, pessoa jurídica de direito privado, inscrita no CNPJ/MF sob o nº {{emitente_cnpj}}, com sede em {{emitente_endereco}}, {{emitente_cidade}} - {{emitente_estado}}, neste ato representada por {{emitente_responsavel}}, {{emitente_cargo}}, e-mail: {{emitente_email}}, telefone: {{emitente_telefone}}.
 
 DESTINATÁRIO: {{cliente_empresa}}, inscrita no CNPJ/MF sob o nº {{cliente_cnpj}}, aos cuidados de {{cliente_responsavel}}.
 
@@ -20,7 +20,7 @@ Os serviços objeto desta proposta compreendem: {{descricao_servicos}}.
 
 Cláusula 3ª – Das Condições Financeiras
 
-O valor total para a execução dos serviços descritos nesta proposta é de R$ {{valor_total}} ({{valor_total_extenso}}).
+O valor total para a execução dos serviços descritos nesta proposta é de R$ {{valor_total_proposta}} ({{valor_total_proposta_extenso}}).
 
 § 1º A forma de pagamento acordada será: {{forma_pagamento}}.
 

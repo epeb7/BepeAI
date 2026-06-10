@@ -254,37 +254,32 @@ export function applyExtractedFields(
 }
 
 /**
- * Desfaz o estado até o grupo que contém o campo solicitado.
- * Remove todos os dados desse grupo em diante.
+ * Desfaz o estado para corrigir um campo específico.
+ * Remove apenas o campo alvo dos dados — os demais campos do mesmo grupo
+ * são preservados para não forçar o usuário a redigitar tudo.
+ * O grupo volta para o pendingFieldsInCurrentGroup contendo só o campo editado.
  */
 export function rollbackToField(state: WorkflowState, field: string): WorkflowState | null {
   if (!state.workflowName) return null;
   const workflow = workflows[state.workflowName];
   if (!workflow) return null;
 
-  // Encontra o índice do grupo que contém o campo
   const groupIndex = workflow.fieldGroups.findIndex(g => g.fields.includes(field));
   if (groupIndex === -1) return null;
 
-  // Preserva apenas dados dos grupos anteriores ao alvo
-  const fieldsToKeep = workflow.fieldGroups
-    .slice(0, groupIndex)
-    .flatMap(g => g.fields);
+  // Remove apenas o campo alvo — preserva todos os outros
+  const newData = { ...state.data };
+  delete newData[field];
 
-  const newData: Record<string, string> = {};
-  for (const f of fieldsToKeep) {
-    if (state.data[f]) newData[f] = state.data[f];
-  }
-
-  const targetGroup = workflow.fieldGroups[groupIndex];
+  const newCompleted = state.completedFields.filter(f => f !== field);
 
   return {
     ...state,
     currentGroupIndex: groupIndex,
-    pendingFieldsInCurrentGroup: [...targetGroup.fields],
+    // Só o campo editado fica pendente — não volta o grupo inteiro
+    pendingFieldsInCurrentGroup: [field],
     data: newData,
-    completedFields: Object.keys(newData),
+    completedFields: newCompleted,
     awaitingConfirmation: false,
-    // conversationId e turnNumber são preservados pelo spread
   };
 }

@@ -31,9 +31,19 @@ const FRASES_FALHA = [
   'não foi fornecida',
 ];
 
-function isExtracaoFalha(valor: string): boolean {
+// Campos de texto livre têm conteúdo longo por natureza — não rejeitar por tamanho
+const CAMPOS_TEXTO_LONGO = new Set([
+  'resumo_executivo', 'principais_resultados', 'recomendacoes',
+  'objeto_servicos', 'descricao_servicos', 'escopo_detalhado',
+  'descricao_itens', 'descricao_informacoes', 'finalidade_nda',
+]);
+
+function isExtracaoFalha(valor: string, campo?: string): boolean {
   const lower = valor.toLowerCase();
-  return FRASES_FALHA.some(f => lower.includes(f)) || valor.length > 150;
+  if (FRASES_FALHA.some(f => lower.includes(f))) return true;
+  // Para campos de texto longo, não rejeitar por tamanho
+  if (campo && CAMPOS_TEXTO_LONGO.has(campo)) return false;
+  return valor.length > 150;
 }
 
 // ============================================================
@@ -108,11 +118,11 @@ function extrairValorMonetario(texto: string, labelRegex?: RegExp): string | nul
   return null;
 }
 
-function extrairTextoLivre(texto: string, labels: string[]): string | null {
+function extrairTextoLivre(texto: string, labels: string[], maxLen = 500): string | null {
   // Exige ":" após o label — evita capturar cabeçalhos de seção
   // (ex: "OBJETO E CONDICOES") ou o label embutido em prosa.
   for (const lbl of labels) {
-    const m = texto.match(new RegExp(`\\b${lbl}\\s*:\\s*([^\\n]{2,200})`, 'i'));
+    const m = texto.match(new RegExp(`\\b${lbl}\\s*:\\s*([^\\n]{2,${maxLen}})`, 'i'));
     if (m) return m[1].trim();
   }
   return null;
@@ -191,8 +201,32 @@ function extrairCampoManual(texto: string, campo: string): string | null {
     return extrairData(texto);
   }
 
+  // ── Cidades e estados da proposta ─────────────────────────
+  if (campo === 'emitente_cidade') {
+    return extrairTextoLivre(texto, ['cidade(?:\\s+(?:do\\s+)?emitente)?', 'cidade']);
+  }
+  if (campo === 'emitente_estado') {
+    const UFS = new Set(['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS',
+                         'MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC',
+                         'SP','SE','TO']);
+    const labeled = texto.match(/(?:estado|uf)\s*[\(:]\s*([A-Za-z]{2})\b/i);
+    if (labeled) { const uf = labeled[1].toUpperCase(); if (UFS.has(uf)) return uf; }
+    return null;
+  }
+
+  // ── Endereço do emitente de orçamento ──────────────────────
+  if (campo === 'endereco_emitente') {
+    return extrairEndereco(texto);
+  }
+
   // ── Valores monetários ─────────────────────────────────────
   if (campo === 'valor_total' || campo === 'valor') {
+    return extrairValorMonetario(texto, /(?:valor\s*(?:total)?\s*:?|total\s*:?)/i);
+  }
+  if (campo === 'valor_total_proposta') {
+    return extrairValorMonetario(texto, /(?:valor\s*(?:total)?\s*:?|total\s*:?)/i);
+  }
+  if (campo === 'valor_total_orcamento') {
     return extrairValorMonetario(texto, /(?:valor\s*(?:total)?\s*:?|total\s*:?)/i);
   }
   if (campo === 'valor_unitario') {
@@ -465,7 +499,7 @@ Retorne JSON com exatamente estas chaves: { ${expectedKeys} }`;
         ],
         taskType:    'extraction',
         temperature: 0,
-        max_tokens:  600,
+        max_tokens:  900,
       },
       'extrairMultiplosCampos'
     );
@@ -477,7 +511,7 @@ Retorne JSON com exatamente estas chaves: { ${expectedKeys} }`;
 
     for (const campo of camposParaLLM) {
       const val = extracted[campo.field];
-      if (typeof val === 'string' && val.trim() && !isExtracaoFalha(val)) {
+      if (typeof val === 'string' && val.trim() && !isExtracaoFalha(val, campo.field)) {
         resultado[campo.field] = val.trim();
       }
     }
@@ -512,7 +546,7 @@ const MAX_DOC_CHARS = 12_000;
 // Limpeza de valor: remove "label do próximo campo" colado e rejeita lixo.
 function limparValorCampo(raw: string, campo: WorkflowStep): string | null {
   let v = raw.trim();
-  if (!v || isExtracaoFalha(v)) return null;
+  if (!v || isExtracaoFalha(v, campo.field)) return null;
   // Corta a partir de um "Label:" embutido — só uma ÚNICA palavra seguida de ":".
   v = v.replace(/\s+[A-Za-zÀ-ú]{3,15}:\s.*$/, '').trim();
   if (!v) return null;
@@ -781,14 +815,28 @@ VALOR E FORMA DE PAGAMENTO:
 • Dia de vencimento: dia do mês em que o pagamento é devido (ex: dia 10, dia 30)
 
 PROPOSTA COMERCIAL — diferença para contrato:
-• Proposta é uma oferta formal, não um compromisso — tem prazo de validade
-• Se aceita, gera um contrato; se não aceita, expira
-• Validade típica: 15 a 30 dias — depois pode haver reajuste de valores
+• Proposta é uma oferta formal, não um compromisso — tem prazo de validade; se aceita, gera um contrato; se expirar, pode ser renegociada
+• Validade típica: 15 a 30 dias — após esse prazo o emitente pode reajustar valores e condições
+• Escopo detalhado é fundamental — define o que está incluído e protege o emitente de pedidos extras fora do escopo original ("isso não estava na proposta")
+• A forma de aceite mais comum: resposta por e-mail, assinatura do documento, ou emissão de pedido de compra pelo cliente
+• Diferença entre descrição e escopo: descrição é o resumo executivo (o quê e para quê); escopo é a lista de entregas concretas (o como e o quanto)
+• "Prazo de entrega" começa a contar: sempre da data de aceite + pagamento da entrada, nunca da emissão da proposta
+• Perguntas comuns sobre proposta:
+  - "Preciso do CNPJ do cliente?" → Sim — vincula a proposta a uma empresa específica; evita confusão em grupos com vários CNPJs
+  - "O que colocar no escopo?" → Liste cada entrega como bullet point separado por ";" — ex: "Levantamento de requisitos; design UX/UI; desenvolvimento; testes; deploy"
+  - "Validade muito curta ou longa?" → Muito curta (<7 dias) gera pressão desnecessária; muito longa (>60 dias) expõe você a variação de custos
 
 ORÇAMENTO — diferença para proposta:
-• Orçamento é ainda mais informal que proposta — detalhamento de custo sem negociação jurídica
-• Não cria obrigações legais entre as partes por si só
-• Útil para empresas que precisam de 3 orçamentos para licitação ou aprovação interna
+• Orçamento é mais objetivo que proposta — foca em custo e quantidade, sem o conteúdo de apresentação comercial
+• Mais usado para: cotações de fornecedores, licitações públicas (que exigem 3 orçamentos), aprovação interna de despesas, escopo de serviços técnicos
+• Não gera obrigação jurídica sozinho — precisa de aceite formal (pedido de compra, contrato ou nota de encomenda)
+• Validade mais curta que proposta: 15 dias é o padrão — preços de serviços técnicos e materiais variam rapidamente
+• Valor unitário × quantidade = valor total: se for um serviço único, unitário e total são iguais
+• CNPJ ou CPF do solicitante: pessoa jurídica usa CNPJ (14 dígitos); pessoa física usa CPF (11 dígitos)
+• Perguntas comuns sobre orçamento:
+  - "Preciso colocar impostos?" → O sistema não calcula impostos automaticamente; você pode incluir na descrição dos valores (ex: "já inclui ISS de 5%")
+  - "Prazo de execução começa quando?" → Da data de aceite e pagamento inicial — não da emissão do orçamento
+  - "O orçamento vira contrato?" → Não automaticamente; o aceite do orçamento cria um compromisso, mas um contrato formal é recomendado para valores acima de R$ 5.000
 
 NDA (Acordo de Confidencialidade):
 • Protege informações estratégicas trocadas antes de uma parceria, negociação ou contratação
@@ -800,9 +848,25 @@ NDA (Acordo de Confidencialidade):
 • Se alguém perguntar "quanto colocar de penalidade?": entre 10% e 50% do valor do negócio envolvido é padrão
 
 RELATÓRIO FINAL:
-• Documento que formaliza e registra atividades de um período
-• Importante para compliance, auditorias, prestação de contas a sócios ou clientes
-• Não é um contrato — não gera obrigações, apenas registra o histórico
+• Documento gerencial que consolida atividades, resultados e aprendizados de um período ou projeto
+• Fundamental para: compliance, auditorias internas, prestação de contas a sócios/investidores, avaliação de desempenho, controle de gestão
+• Não é um contrato — não gera obrigações entre partes, mas tem valor probatório em auditorias e disputas societárias
+• Estrutura: quatro blocos principais — Identificação → Período → Resultados → Recomendações
+
+CAMPOS DO RELATÓRIO (como orientar o usuário):
+• **Empresa e CNPJ**: a organização que emite o relatório (não necessariamente a que é analisada)
+• **Responsável e Cargo**: quem elaborou e assina; o cargo define a autoridade do documento (ex: Diretor Financeiro tem mais peso que Analista)
+• **Título**: deve ser descritivo — inclua tema + período (ex: "Relatório de Desempenho Comercial — 1º Semestre 2026"); um título vago dificulta a recuperação em auditorias futuras
+• **Período (datas de início e fim)**: delimita exatamente qual intervalo de tempo é coberto — essencial para comparação com períodos anteriores
+• **Resumo executivo**: lido pela diretoria/sócios; deve ter 2–4 frases capturando o número mais importante e o contexto geral. Exemplo: "O 1º semestre de 2026 apresentou crescimento de 18% em receita, impulsionado pela expansão para 2 novos estados e entrega de 3 projetos estratégicos no prazo."
+• **Principais resultados**: dados concretos e verificáveis — use números sempre (%, R$, quantidade); separe por ponto e vírgula. Exemplo: "Crescimento de 18% em receita; entrega de 3 projetos; redução de 12% em custos operacionais; NPS 98%"
+• **Recomendações**: transforma o relatório em instrumento de gestão ativo — não só registra o passado, mas orienta o futuro. Deve ser específico: ação + responsável ou prazo quando souber. Exemplo: "Ampliar equipe de vendas em 2 profissionais até agosto; automatizar processo de faturamento; iniciar prospecção no segmento enterprise"
+
+PERGUNTAS COMUNS SOBRE RELATÓRIO:
+• "Por que preciso do CNPJ no relatório?" → Identifica formalmente quem emitiu o documento; em auditorias externas, relatórios sem identificação corporativa completa podem ser rejeitados
+• "O resumo executivo precisa ser formal?" → Deve ser objetivo e factual, mas não precisa de linguagem jurídica — foco em clareza para quem lê rápido
+• "Posso colocar só resultados positivos?" → Tecnicamente sim, mas relatórios que omitem problemas têm menos credibilidade em auditorias; recomende incluir desafios identificados
+• "O que colocar nas recomendações se não tiver sugestões?" → Pelo menos: confirmar continuidade do que funcionou, e identificar 1–2 pontos de atenção para o próximo ciclo
 
 ═══════════════════════════════════════════
 PROBLEMAS COMUNS QUE VOCÊ PREVINE
@@ -1142,7 +1206,7 @@ Tom: transparente, prestativo, direto. Máximo 8 linhas.`;
         messages,
         taskType:    'conversational',
         temperature: input.situacao === 'chat_livre' ? 0.65 : 0.55,
-        max_tokens:  input.situacao === 'chat_livre' ? 450 : 300,
+        max_tokens:  input.situacao === 'chat_livre' ? 450 : 380,
       },
       'gerarRespostaConversacional'
     );

@@ -1,6 +1,6 @@
 ORÇAMENTO
 
-EMITENTE: {{empresa_emitente}}, pessoa jurídica de direito privado, inscrita no CNPJ/MF sob o nº {{cnpj_emitente}}, responsável: {{responsavel_emitente}}, telefone: {{telefone_emitente}}.
+EMITENTE: {{empresa_emitente}}, pessoa jurídica de direito privado, inscrita no CNPJ/MF sob o nº {{cnpj_emitente}}, com sede em {{endereco_emitente}}, responsável: {{responsavel_emitente}}, telefone: {{telefone_emitente}}.
 
 SOLICITANTE: {{cliente_nome}}, CNPJ/CPF: {{cliente_cnpj_cpf}}.
 
@@ -17,7 +17,7 @@ Cláusula 2ª – Da Composição de Valores
 a) Descrição: {{descricao_itens}};
 b) Quantidade/Unidade: {{quantidade_unidade}};
 c) Valor unitário: R$ {{valor_unitario}};
-d) Valor total: R$ {{valor_total}} ({{valor_total_extenso}}).
+d) Valor total: R$ {{valor_total_orcamento}} ({{valor_total_orcamento_extenso}}).
 
 § 1º Os valores apresentados incluem todos os custos necessários para a realização completa do escopo descrito, exceto tributos e encargos de responsabilidade exclusiva do solicitante, salvo disposição expressa em contrário.
 

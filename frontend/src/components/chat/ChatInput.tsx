@@ -31,10 +31,9 @@ export const ChatInput = ({ onSend, disabled, workflowActive, workflowComplete, 
 
   const handleSubmit = () => {
     if (!canSend) return;
-    // Sem texto mas com anexo: instrução padrão que faz a IA reconhecer o anexo
-    // e perguntar que tipo de documento criar a partir dele.
+    // Sem texto mas com anexo: instrução neutra que não dispara detecção de tipo de documento.
     const text = input.trim() || (attachments.length > 0
-      ? 'Anexei um arquivo. Que tipo de documento posso criar a partir dele?'
+      ? 'Anexei um arquivo para referência.'
       : '');
     if (!text) return;
     onSend(text);

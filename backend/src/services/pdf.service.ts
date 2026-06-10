@@ -126,7 +126,7 @@ function formatarCampo(key: string, valor: string): string {
   if (limpo === '___________') return limpo;
   if (key.includes('cnpj'))            return formatarCNPJ(limpo);
   if (key.includes('cpf'))             return formatarCPF(limpo);
-  if (key === 'valor_total' || key === 'valor' || key === 'valor_unitario' || key === 'penalidade_valor') return formatarMoeda(limpo);
+  if (['valor_total', 'valor_total_proposta', 'valor_total_orcamento', 'valor', 'valor_unitario', 'penalidade_valor'].includes(key)) return formatarMoeda(limpo);
   return limpo;
 }
 
@@ -620,20 +620,24 @@ export async function gerarPDF(
   let template = await carregarTemplate(tipoDocumento);
 
   // Campos derivados (extenso e formatados)
+  // Suporte a dois nomes para valor total: valor_total (contrato) e valor_total_proposta/valor_total_orcamento
+  const valorTotalEfetivo = dados['valor_total'] ?? dados['valor_total_proposta'] ?? dados['valor_total_orcamento'] ?? '';
   const dadosCompletos: Record<string, string> = {
     ...dados,
     // contrato
-    valor_total_extenso:         valorParaExtenso(dados['valor_total']       ?? ''),
-    aviso_previo_extenso:        numeroPorExtenso(dados['aviso_previo']      ?? ''),
-    data_assinatura_formatada:   dados['data_assinatura']                    ?? '',
+    valor_total_extenso:              valorParaExtenso(valorTotalEfetivo),
+    aviso_previo_extenso:             numeroPorExtenso(dados['aviso_previo']              ?? ''),
+    data_assinatura_formatada:        dados['data_assinatura']                             ?? '',
     // proposta
-    validade_proposta_extenso:   numeroPorExtenso(dados['validade_proposta'] ?? ''),
+    valor_total_proposta_extenso:     valorParaExtenso(dados['valor_total_proposta']       ?? valorTotalEfetivo),
+    validade_proposta_extenso:        numeroPorExtenso(dados['validade_proposta']           ?? ''),
     // orcamento
-    valor_unitario_extenso:      valorParaExtenso(dados['valor_unitario']    ?? ''),
+    valor_total_orcamento_extenso:    valorParaExtenso(dados['valor_total_orcamento']       ?? valorTotalEfetivo),
+    valor_unitario_extenso:           valorParaExtenso(dados['valor_unitario']              ?? ''),
     // nda
-    vigencia_meses_extenso:      numeroPorExtenso(dados['vigencia_meses']    ?? ''),
-    prazo_confidencialidade_extenso: numeroPorExtenso(dados['prazo_confidencialidade'] ?? ''),
-    penalidade_valor_extenso:    valorParaExtenso(dados['penalidade_valor']  ?? ''),
+    vigencia_meses_extenso:           numeroPorExtenso(dados['vigencia_meses']              ?? ''),
+    prazo_confidencialidade_extenso:  numeroPorExtenso(dados['prazo_confidencialidade']     ?? ''),
+    penalidade_valor_extenso:         valorParaExtenso(dados['penalidade_valor']            ?? ''),
   };
 
   if (template.includes('{{_dados_}}')) {

@@ -19,8 +19,15 @@ export function useHistory() {
     }
   }, []);
 
-  // Carrega na montagem
+  // Carrega na montagem e sincroniza entre abas/dispositivos a cada 30s
   useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    const id = setInterval(refresh, 30_000);
+    // Também sincroniza quando a aba volta ao foco (ex: usuário alterna entre PC e celular)
+    const onFocus = () => refresh();
+    window.addEventListener('focus', onFocus);
+    return () => { clearInterval(id); window.removeEventListener('focus', onFocus); };
+  }, [refresh]);
 
   const loadConversation = useCallback(async (id: string): Promise<ConversationDetail | null> => {
     try {

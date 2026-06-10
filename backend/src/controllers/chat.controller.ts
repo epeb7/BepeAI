@@ -211,8 +211,10 @@ const FIELD_LABELS: Record<string, string> = {
   data_assinatura: 'Data de Assinatura',
   // ── Proposta Comercial ──
   emitente_empresa: 'Empresa Emitente', emitente_cnpj: 'CNPJ do Emitente',
-  emitente_endereco: 'Endereço do Emitente', emitente_responsavel: 'Responsável pela Proposta',
-  emitente_cargo: 'Cargo', emitente_email: 'E-mail de Contato', emitente_telefone: 'Telefone',
+  emitente_endereco: 'Endereço do Emitente', emitente_cidade: 'Cidade do Emitente',
+  emitente_estado: 'Estado do Emitente',
+  emitente_responsavel: 'Responsável pela Proposta', emitente_cargo: 'Cargo',
+  emitente_email: 'E-mail de Contato', emitente_telefone: 'Telefone',
   cliente_empresa: 'Empresa Cliente', cliente_cnpj: 'CNPJ do Cliente',
   cliente_responsavel: 'Responsável no Cliente',
   descricao_servicos: 'Descrição dos Serviços', escopo_detalhado: 'Escopo Detalhado',
@@ -221,6 +223,7 @@ const FIELD_LABELS: Record<string, string> = {
   cidade_emissao: 'Cidade de Emissão', data_emissao: 'Data de Emissão',
   // ── Orçamento ──
   empresa_emitente: 'Empresa Emissora', cnpj_emitente: 'CNPJ do Emitente',
+  endereco_emitente: 'Endereço do Emitente',
   responsavel_emitente: 'Responsável pela Emissão', telefone_emitente: 'Telefone de Contato',
   cliente_nome: 'Solicitante', cliente_cnpj_cpf: 'CNPJ/CPF do Solicitante',
   descricao_itens: 'Descrição dos Itens', quantidade_unidade: 'Quantidade/Unidade',
@@ -250,15 +253,16 @@ const GROUP_ICONS: Record<string, string> = {
   // contrato
   contratante_dados: '🏢', contratante_rep: '👤',
   contratado_dados: '🏢',  contratado_rep:  '👤',
-  contrato_objeto: '📋',   contrato_periodo: '📅', contrato_encerramento: '⚖️',
+  contrato_objeto: '📋',   contrato_periodo: '💰', contrato_encerramento: '⚖️',
   // proposta
-  proposta_emitente: '🏢', proposta_cliente: '👤', proposta_escopo: '📋', proposta_financeiro: '💰',
+  proposta_emitente: '🏢', proposta_responsavel: '👤', proposta_cliente: '👤',
+  proposta_escopo: '📋', proposta_financeiro: '💰',
   // orçamento
-  orcamento_emitente: '🏢', orcamento_cliente: '📦', orcamento_condicoes: '💰',
+  orcamento_emitente: '🏢', orcamento_cliente: '👤', orcamento_itens: '📦', orcamento_condicoes: '💰',
   // relatório
-  relatorio_empresa: '🏢', relatorio_periodo: '📊', relatorio_recomendacoes: '💡',
+  relatorio_empresa: '🏢', relatorio_periodo: '📅', relatorio_resultados: '📊', relatorio_recomendacoes: '💡',
   // nda
-  nda_divulgadora: '🔐', nda_receptora: '👤', nda_objeto: '📄', nda_vigencia: '⚖️',
+  nda_divulgadora: '🔐', nda_receptora: '👤', nda_finalidade: '📄', nda_vigencia: '⚖️',
 };
 
 function formatarValorResumo(field: string, value: string): string {
@@ -532,15 +536,25 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
   // ── NOVO DOCUMENTO — usuário pede tipo de doc com workflow já ativo/completo ──
   if (state.workflowName && intent !== 'CANCEL' && intent !== 'HELP') {
     const novoTipo = detectDocumentType(message);
-    if (novoTipo && novoTipo !== state.workflowName) {
-      // Propõe troca em vez de trocar imediatamente — evita reset acidental
-      const nomeAtual = state.workflowName.replace(/_/g, ' ');
-      const nomeNovo  = novoTipo.replace(/_/g, ' ');
-      state = { ...state, pendingDocumentSwitch: novoTipo };
-      await setState(userId, state);
-      const textoConfirm = `Você tem um **${nomeAtual}** em andamento.\n\nDeseja **interromper** e iniciar um novo **${nomeNovo}**? Os dados já coletados serão perdidos.\n\nResponda **sim** para trocar ou **não** para continuar.`;
-      logAndAdvanceTurn(message, textoConfirm);
-      return res.json(buildResponse(textoConfirm, state));
+    if (novoTipo) {
+      if (novoTipo !== state.workflowName) {
+        // Tipo diferente: propõe troca explícita
+        const nomeAtual = state.workflowName.replace(/_/g, ' ');
+        const nomeNovo  = novoTipo.replace(/_/g, ' ');
+        state = { ...state, pendingDocumentSwitch: novoTipo };
+        await setState(userId, state);
+        const textoConfirm = `Você tem um **${nomeAtual}** em andamento.\n\nDeseja **interromper** e iniciar um novo **${nomeNovo}**? Os dados já coletados serão perdidos.\n\nResponda **sim** para trocar ou **não** para continuar.`;
+        logAndAdvanceTurn(message, textoConfirm);
+        return res.json(buildResponse(textoConfirm, state));
+      } else if (isWorkflowComplete(state)) {
+        // Mesmo tipo + workflow completo: propõe criar um NOVO documento do mesmo tipo
+        const nomeTipo = novoTipo.replace(/_/g, ' ');
+        state = { ...state, pendingDocumentSwitch: novoTipo };
+        await setState(userId, state);
+        const textoNovoMesmo = `O **${nomeTipo}** anterior já está completo.\n\nDeseja criar um **novo ${nomeTipo}**? A conversa atual será encerrada.\n\nResponda **sim** para começar ou **não** para continuar consultando o documento atual.`;
+        logAndAdvanceTurn(message, textoNovoMesmo);
+        return res.json(buildResponse(textoNovoMesmo, state));
+      }
     }
   }
 

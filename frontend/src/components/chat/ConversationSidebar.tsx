@@ -292,10 +292,13 @@ export function ConversationSidebar({
           transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
                       opacity 0.22s ease;
           opacity: 1;
+          flex-shrink: 0;
         }
         .bepe-sidebar.collapsed {
-          width: 0;
+          width: 0 !important;
           opacity: 0;
+          border-right: none !important;
+          pointer-events: none;
         }
         .bepe-sidebar-inner {
           width: 240px;
@@ -303,6 +306,39 @@ export function ConversationSidebar({
           display: flex;
           flex-direction: column;
           flex-shrink: 0;
+          min-width: 240px;
+        }
+
+        /* Mobile: sidebar flutua sobre o conteúdo em vez de empurrar */
+        @media (max-width: 640px) {
+          .bepe-sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            z-index: 50;
+            width: 240px !important;
+            transform: translateX(0);
+            transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                        opacity 0.22s ease;
+          }
+          .bepe-sidebar.collapsed {
+            transform: translateX(-100%);
+            width: 240px !important;
+            opacity: 0;
+            border-right: 1px solid hsl(220 14% 16%) !important;
+          }
+          .bepe-sidebar-backdrop {
+            display: block;
+          }
+        }
+        .bepe-sidebar-backdrop {
+          display: none;
+          position: fixed;
+          inset: 0;
+          z-index: 49;
+          background: hsl(220 20% 5% / 0.6);
+          backdrop-filter: blur(2px);
         }
         .bepe-search-input::placeholder { color: hsl(215 8% 36%); }
         .bepe-search-input:focus { outline: none; }
@@ -319,12 +355,20 @@ export function ConversationSidebar({
         .bepe-sidebar-list::-webkit-scrollbar-thumb { background: hsl(220 12% 22%); border-radius: 99px; }
       `}</style>
 
+      {/* Backdrop mobile — toque fora fecha a sidebar */}
+      {open && (
+        <div
+          className="bepe-sidebar-backdrop"
+          onClick={onToggle}
+          aria-hidden="true"
+        />
+      )}
+
       <aside
         className={`bepe-sidebar${open ? '' : ' collapsed'}`}
         style={{
           background: 'hsl(220 20% 10%)',
           borderRight: '1px solid hsl(220 14% 16%)',
-          flexShrink: 0,
           height: '100%',
         }}
       >
