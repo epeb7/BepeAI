@@ -90,6 +90,19 @@ function isSaudacao(texto: string): boolean {
 }
 
 const CLAUSULAS_DOCUMENTO: Record<string, string[]> = {
+  contrato_rs: [
+    'Cláusula 1ª – Do Objeto (vagas e processo seletivo)',
+    'Cláusula 2ª – Das Obrigações da Contratada (Leticia Abreu)',
+    'Cláusula 3ª – Das Obrigações da Contratante',
+    'Cláusula 4ª – Do Preço e Condições de Pagamento (50%+50%, DISC)',
+    'Cláusula 5ª – Da Desistência (30% antes, 100% após entrevistas)',
+    'Cláusula 6ª – Do Prazo e Rescisão',
+    'Cláusula 7ª – Dos Prazos para Entrevistas (7 dias úteis)',
+    'Cláusula 8ª – Do Relacionamento entre as Partes (sem vínculo empregatício)',
+    'Cláusula 9ª – Da Confidencialidade (12 meses pós-rescisão)',
+    'Cláusula 10ª – Das Disposições Finais (LGPD, não-aliciamento, assinatura Gov.br)',
+    'Cláusula 11ª – Do Foro',
+  ],
   contrato: [
     'Cláusula 1ª – Do Objeto (serviço contratado)',
     'Cláusula 2ª – Do Prazo (vigência e prorrogação)',
@@ -174,6 +187,9 @@ function detectDocumentType(msg: string, strict = false): string | null {
   // Confidencialidade/sigilo sozinhos só no modo strict
   if (strict && /\b(confidencialidade|sigilo)\b/.test(lower)) return 'nda';
 
+  // Contrato R&S — recrutamento e seleção (maior prioridade que contrato genérico)
+  if (/\b(recrutamento|selecao de talentos|processo seletivo|contrato de rs|contrato rs|rh|recursos humanos|headhunter|headhunting)\b/.test(lower)) return 'contrato_rs';
+
   // Contrato — prestação de serviços ou contrato genérico
   if (/\b(contrato|prestacao de servico|prestacao de servicos|contrato de servico|contrato de servicos|acordo de servico|formalizar|formalizacao)\b/.test(lower)) return 'contrato';
 
@@ -210,6 +226,11 @@ const FIELD_LABELS: Record<string, string> = {
   dia_pagamento: 'Dia de Vencimento', aviso_previo: 'Aviso Prévio (dias)',
   foro_comarca: 'Foro Judicial', cidade_assinatura: 'Cidade de Assinatura',
   data_assinatura: 'Data de Assinatura',
+  // ── Contrato R&S ──
+  vagas_descricao: 'Vagas do Processo Seletivo', descricao_vagas_valores: 'Investimento por Vaga',
+  valor_entrada: 'Valor de Entrada (50%)', valor_final: 'Valor na Contratação (50%)',
+  valor_disc: 'Valor DISC por Candidato', prazo_meses: 'Prazo do Contrato (meses)',
+  foro_estado: 'Estado do Foro Judicial', contratante_email: 'E-mail da Contratante',
   // ── Proposta Comercial ──
   emitente_empresa: 'Empresa Emitente', emitente_cnpj: 'CNPJ do Emitente',
   emitente_endereco: 'Endereço do Emitente', emitente_cidade: 'Cidade do Emitente',

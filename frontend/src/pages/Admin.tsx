@@ -123,7 +123,7 @@ export function Admin({ onLogout }: AdminProps) {
             </p>
           </div>
           <button
-            onClick={() => { onLogout?.(); navigate('/dashboard'); }}
+            onClick={() => navigate('/dashboard')}
             style={{
               background: 'none', border: '1.5px solid hsl(220 14% 22%)',
               borderRadius: '10px', padding: '7px 14px',

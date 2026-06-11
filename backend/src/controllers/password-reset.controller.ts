@@ -170,16 +170,6 @@ export const confirmReset = async (req: Request, res: Response) => {
 export const adminResetPassword = async (req: AuthRequest, res: Response) => {
   if (!supabase) return res.status(503).json({ error: 'Serviço indisponível' });
 
-  const { data: caller } = await supabase
-    .from('users')
-    .select('role')
-    .eq('id', req.userId)
-    .single();
-
-  if (!caller || caller.role !== 'admin') {
-    return res.status(403).json({ error: 'Acesso restrito a administradores' });
-  }
-
   const { userId } = req.params;
   const { data: target } = await supabase
     .from('users')

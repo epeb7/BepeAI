@@ -195,17 +195,6 @@ export const createInvite = async (req: AuthRequest, res: Response) => {
     return res.status(503).json({ error: 'Serviço indisponível' });
   }
 
-  // Verificar se o usuário autenticado é admin
-  const { data: caller } = await supabase
-    .from('users')
-    .select('role')
-    .eq('id', req.userId)
-    .single();
-
-  if (!caller || caller.role !== 'admin') {
-    return res.status(403).json({ error: 'Acesso restrito a administradores' });
-  }
-
   const emailTarget: string | null = typeof req.body?.email === 'string'
     ? req.body.email.toLowerCase()
     : null;
@@ -261,16 +250,6 @@ export const createInvite = async (req: AuthRequest, res: Response) => {
 export const listInvites = async (req: AuthRequest, res: Response) => {
   if (!supabase) {
     return res.status(503).json({ error: 'Serviço indisponível' });
-  }
-
-  const { data: caller } = await supabase
-    .from('users')
-    .select('role')
-    .eq('id', req.userId)
-    .single();
-
-  if (!caller || caller.role !== 'admin') {
-    return res.status(403).json({ error: 'Acesso restrito a administradores' });
   }
 
   const { data, error } = await supabase

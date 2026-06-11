@@ -9,6 +9,7 @@ const Login          = lazy(() => import('./pages/Login').then(m => ({ default: 
 const Register       = lazy(() => import('./pages/Register').then(m => ({ default: m.Register })));
 const ChatBot        = lazy(() => import('./pages/ChatBot').then(m => ({ default: m.ChatBot })));
 const Admin          = lazy(() => import('./pages/Admin').then(m => ({ default: m.Admin })));
+const Profile        = lazy(() => import('./pages/Profile').then(m => ({ default: m.Profile })));
 const ForgotPassword = lazy(() => import('./pages/ResetPassword').then(m => ({ default: m.ForgotPassword })));
 const ResetPassword  = lazy(() => import('./pages/ResetPassword').then(m => ({ default: m.ResetPassword })));
 
@@ -73,6 +74,7 @@ function App() {
                 <Route path="/reset-password"  element={<ResetPassword />} />
                 <Route path="/dashboard"      element={token ? <ChatBot /> : <Navigate to="/login" replace />} />
                 <Route path="/admin"          element={token && isAdminToken(token) ? <Admin onLogout={() => setToken(null)} /> : <Navigate to="/login" replace />} />
+                <Route path="/profile"       element={token ? <Profile /> : <Navigate to="/login" replace />} />
                 <Route path="/"              element={<Navigate to="/dashboard" replace />} />
               </Routes>
             </Suspense>

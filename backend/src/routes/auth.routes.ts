@@ -32,6 +32,17 @@ const resetLimiter = rateLimit({
     req.headers['x-forwarded-for']?.toString().split(',')[0] ?? req.ip ?? 'unknown',
 });
 
+// 5 tentativas de confirmação por IP por hora — evita brute force no token
+const resetConfirmLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas tentativas de redefinição de senha. Aguarde 1 hora.' },
+  keyGenerator: (req) =>
+    req.headers['x-forwarded-for']?.toString().split(',')[0] ?? req.ip ?? 'unknown',
+});
+
 router.post('/login',                    loginLimiter,   login);
 router.post('/logout',                   authMiddleware, logout);
 router.get( '/invite/validate',                          validateInvite);
@@ -39,7 +50,7 @@ router.post('/register',                 registerLimiter, register);
 
 router.post('/password-reset/request',   resetLimiter,   requestReset);
 router.get( '/password-reset/validate',                  validateResetToken);
-router.post('/password-reset/confirm',                   confirmReset);
+router.post('/password-reset/confirm',   resetConfirmLimiter, confirmReset);
 router.post('/password-reset/change',    authMiddleware, changePassword);
 
 export default router;

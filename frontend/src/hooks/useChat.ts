@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { sendMessage, generatePDF, ProgressInfo } from '../services/groq.service';
 import api from '../services/api';
-import { getBepeLogoBase64 } from '../lib/bepeLogoBase64';
 import { ConversationDetail } from '../services/history.service';
 
 export interface Message {
@@ -120,17 +119,17 @@ export function useChat(onConversationChange?: () => void) {
     dadosExtraidos: Record<string, string>,
     tipoDocumento: string
   ) => {
-    const logoBase64 = localStorage.getItem('logoBase64') ?? await getBepeLogoBase64();
-    const blob = await generatePDF({ tipoDocumento, ...dadosExtraidos }, logoBase64);
+    const blob = await generatePDF({ tipoDocumento, ...dadosExtraidos });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     const nomes: Record<string, string> = {
-      contrato:           'BepeAI_Contrato_Prestacao_Servicos',
-      proposta_comercial: 'BepeAI_Proposta_Comercial',
-      orcamento:          'BepeAI_Orcamento',
-      relatorio_final:    'BepeAI_Relatorio_Final',
-      nda:                'BepeAI_Acordo_Confidencialidade',
+      contrato:           'Contrato_Prestacao_Servicos',
+      contrato_rs:        'Contrato_Recrutamento_Selecao',
+      proposta_comercial: 'Proposta_Comercial',
+      orcamento:          'Orcamento',
+      relatorio_final:    'Relatorio_Final',
+      nda:                'Acordo_Confidencialidade',
     };
     const nomeArquivo = nomes[tipoDocumento] ?? `BepeAI_${tipoDocumento}`;
     const data = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');

@@ -1,0 +1,69 @@
+ACORDO DE CONFIDENCIALIDADE E NÃO DIVULGAÇÃO
+
+PARTE DIVULGADORA: {{divulgadora_empresa}}, pessoa jurídica de direito privado, inscrita no CNPJ/MF sob o nº {{divulgadora_cnpj}}, com sede em {{divulgadora_endereco}}, neste ato representada por {{divulgadora_representante}}, {{divulgadora_cargo}}, inscrito(a) no CPF/MF sob o nº {{divulgadora_cpf}}.
+
+PARTE RECEPTORA: {{receptora_empresa}}, pessoa jurídica de direito privado, inscrita no CNPJ/MF sob o nº {{receptora_cnpj}}, com sede em {{receptora_endereco}}, neste ato representada por {{receptora_representante}}, {{receptora_cargo}}, inscrito(a) no CPF/MF sob o nº {{receptora_cpf}}.
+
+RS_SECTION: FINALIDADE
+
+O presente Acordo tem por finalidade viabilizar o compartilhamento de informações confidenciais entre as Partes, no contexto de: {{finalidade_nda}}, doravante denominada simplesmente "Finalidade".
+
+As informações compartilhadas somente poderão ser utilizadas para os fins expressamente previstos nesta cláusula, sendo vedada qualquer utilização diversa sem autorização escrita prévia da Parte Divulgadora.
+
+O recebimento das informações confidenciais não confere à Parte Receptora qualquer direito, licença ou autorização, implícita ou explícita, sobre os ativos, tecnologias ou propriedade intelectual da Parte Divulgadora, além do necessário estritamente à Finalidade.
+
+RS_SECTION: INFORMAÇÕES CONFIDENCIAIS
+
+Para os fins deste Acordo, consideram-se confidenciais todas as informações, dados, documentos, tecnologias e conhecimentos de qualquer natureza, especialmente: {{descricao_informacoes}}, transmitidos pela Parte Divulgadora à Parte Receptora, em qualquer formato ou meio, antes ou durante a vigência deste instrumento.
+
+Não serão consideradas confidenciais as informações que:
+
+RS_ITEM: Sejam ou se tornem de conhecimento público por ato não imputável à Parte Receptora;
+RS_ITEM: Já eram conhecidas pela Parte Receptora antes do recebimento, conforme comprovação documental prévia;
+RS_ITEM: Sejam desenvolvidas independentemente pela Parte Receptora, sem recurso às informações recebidas;
+RS_ITEM: Sejam obtidas de terceiros autorizados, sem qualquer obrigação de sigilo.
+
+O ônus de demonstrar que determinada informação se enquadra em uma das exceções acima recai exclusivamente sobre a Parte Receptora.
+
+RS_SECTION: OBRIGAÇÕES DA PARTE RECEPTORA
+
+A Parte Receptora obriga-se a:
+
+RS_ITEM: Manter as Informações Confidenciais em estrito sigilo, adotando medidas de segurança equivalentes às utilizadas para proteger suas próprias informações confidenciais, nunca inferiores a um padrão de diligência razoável reconhecido pelo mercado;
+RS_ITEM: Não divulgar, reproduzir, ceder ou transferir as Informações Confidenciais a terceiros, sob qualquer forma, sem autorização prévia e escrita da Parte Divulgadora;
+RS_ITEM: Restringir o acesso às Informações Confidenciais aos seus colaboradores, consultores e assessores que necessitem conhecê-las para a Finalidade deste Acordo, assegurando que tais pessoas estejam vinculadas a obrigações de sigilo equivalentes ou mais rigorosas;
+RS_ITEM: Notificar imediatamente a Parte Divulgadora, por escrito e no prazo máximo de 24 (vinte e quatro) horas, caso tome conhecimento de qualquer divulgação não autorizada, acesso indevido ou suspeita fundada de vazamento de Informações Confidenciais;
+RS_ITEM: Devolver ou destruir, mediante comprovação por escrito, toda a documentação e registros contendo Informações Confidenciais, imediatamente após o término deste Acordo ou a qualquer tempo mediante solicitação fundamentada da Parte Divulgadora;
+RS_ITEM: Não utilizar as Informações Confidenciais para fins de concorrência direta ou indireta com a Parte Divulgadora, durante a vigência deste Acordo e pelo período de confidencialidade previsto.
+
+RS_SECTION: VIGÊNCIA
+
+O presente Acordo terá vigência de {{vigencia_meses}} ({{vigencia_meses_extenso}}) meses, contados da data de assinatura.
+
+A obrigação de confidencialidade estabelecida neste instrumento persistirá por {{prazo_confidencialidade}} ({{prazo_confidencialidade_extenso}}) anos após o encerramento ou rescisão deste Acordo, independentemente do motivo do término, assegurando proteção duradoura aos ativos informacionais da Parte Divulgadora.
+
+RS_SECTION: PENALIDADES
+
+O descumprimento de qualquer obrigação prevista neste Acordo sujeitará a Parte infratora ao pagamento de multa no valor de R$ {{penalidade_valor}} ({{penalidade_valor_extenso}}), por violação identificada, sem prejuízo da responsabilização por perdas e danos materiais e morais eventualmente comprovados.
+
+A multa prevista nesta cláusula tem caráter compensatório e não exclui o direito da Parte prejudicada de buscar tutela específica, medida liminar ou indenização integral pelos danos sofridos.
+
+Em caso de violação reiterada, o valor da multa será multiplicado pelo número de violações identificadas, podendo a Parte prejudicada rescindir este Acordo imediatamente, com direito à indenização integral.
+
+RS_SECTION: PROPRIEDADE INTELECTUAL
+
+Nenhuma disposição deste Acordo será interpretada como transferência de direitos de propriedade intelectual, concessão de licença de uso de patentes, marcas, segredos industriais ou quaisquer outros direitos de propriedade da Parte Divulgadora à Parte Receptora.
+
+Quaisquer melhorias, adaptações ou desenvolvimentos realizados pela Parte Receptora a partir das Informações Confidenciais recebidas serão de propriedade exclusiva da Parte Divulgadora, devendo ser imediatamente comunicados e transferidos.
+
+RS_SECTION: DISPOSIÇÕES GERAIS
+
+RS_ITEM: Este Acordo é celebrado em caráter irrevogável e irretratável, obrigando as partes e seus sucessores a qualquer título;
+RS_ITEM: A invalidade ou ineficácia de qualquer cláusula deste Acordo não afetará as demais, que permanecerão válidas e eficazes;
+RS_ITEM: Eventuais alterações deste Acordo somente serão válidas se formalizadas por escrito e assinadas pelos representantes legais de ambas as partes;
+RS_ITEM: Este instrumento representa a totalidade dos acordos entre as partes sobre confidencialidade, prevalecendo sobre quaisquer entendimentos anteriores.
+RS_ITEM: As partes elegem o foro da Comarca de {{foro_comarca}} para dirimir quaisquer controvérsias decorrentes deste Acordo, com expressa renúncia a qualquer outro, por mais privilegiado que seja.
+
+E por estarem assim justas e contratadas, as partes assinam o presente instrumento.
+
+RS_ASSINATURAS: {{cidade_assinatura}}, {{data_assinatura_formatada}}

@@ -9,9 +9,10 @@ import { TypingIndicator } from '../components/chat/TypingIndicator';
 import { ProgressBar } from '../components/chat/ProgressBar';
 import { ConversationSidebar } from '../components/chat/ConversationSidebar';
 import { ToastContainer } from '../components/ui/ToastContainer';
-import { PanelLeft, LogOut, PenSquare, Settings } from 'lucide-react';
+import { PanelLeft, LogOut, PenSquare, Settings, UserCircle } from 'lucide-react';
 import { LogoBrain } from '../components/logo/LogoBrain';
 import { authService } from '../services/auth.service';
+import { userService, UserProfile } from '../services/user.service';
 import { isAdminToken } from '../lib/utils';
 
 // ── Sugestões de boas-vindas ─────────────────────────────────
@@ -24,6 +25,12 @@ const SUGGESTIONS = [
 ];
 
 export function ChatBot() {
+  const [tenantProfile, setTenantProfile] = useState<UserProfile | null>(null);
+
+  useEffect(() => {
+    userService.getProfile().then(setTenantProfile).catch(() => {});
+  }, []);
+
   const {
     conversations, isLoading: histLoading,
     refresh, loadConversation, rename, remove,
@@ -192,6 +199,8 @@ export function ChatBot() {
               </span>
             </div>
 
+            <TenantBadge profile={tenantProfile} />
+            <ProfileButton />
             <AdminLink />
             <LogoutButton />
           </header>
@@ -318,6 +327,64 @@ export function ChatBot() {
 }
 
 // ── Sub-components ────────────────────────────────────────────
+
+// Exibe logo ou nome da empresa no header — apenas quando o usuário tem configuração de tenant
+function TenantBadge({ profile }: { profile: UserProfile | null }) {
+  if (!profile) return null;
+  if (!profile.logo_base64 && !profile.company_name) return null;
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: '8px',
+      padding: '4px 10px', borderRadius: '8px', marginRight: '4px',
+      background: 'hsl(220 18% 12%)',
+      border: '1px solid hsl(220 14% 18%)',
+      maxWidth: '160px', overflow: 'hidden',
+    }}>
+      {profile.logo_base64 ? (
+        <img
+          src={profile.logo_base64}
+          alt="Logo"
+          style={{ height: '22px', maxWidth: '120px', objectFit: 'contain', flexShrink: 0 }}
+        />
+      ) : (
+        <span style={{
+          fontSize: '11.5px', fontWeight: 600, color: 'hsl(215 14% 72%)',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}>
+          {profile.company_name}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function ProfileButton() {
+  const navigate = useNavigate();
+  return (
+    <button
+      onClick={() => navigate('/profile')}
+      title="Meu perfil"
+      style={{
+        width: '30px', height: '30px', borderRadius: '8px',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'transparent', border: 'none', cursor: 'pointer',
+        color: 'hsl(215 10% 44%)', transition: 'all 0.15s',
+        marginRight: '2px',
+      }}
+      onMouseEnter={e => {
+        e.currentTarget.style.background = 'hsl(220 14% 18%)';
+        e.currentTarget.style.color = 'hsl(215 12% 66%)';
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.background = 'transparent';
+        e.currentTarget.style.color = 'hsl(215 10% 44%)';
+      }}
+    >
+      <UserCircle size={16} />
+    </button>
+  );
+}
 
 function AdminLink() {
   const navigate = useNavigate();

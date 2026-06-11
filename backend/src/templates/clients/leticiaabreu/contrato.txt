@@ -1,0 +1,126 @@
+CONTRATO DE PRESTAÇÃO DE SERVIÇOS
+
+Identificação das partes Contratantes:
+
+CONTRATANTE: {{contratante_empresa}}, inscrita no CNPJ sob o nº {{contratante_cnpj}}, com sede administrativa na {{contratante_endereco}}, com endereço eletrônico: {{contratante_email}}, neste ato representada por seu sócio e representante legal {{contratante_nome}}, CPF nº {{contratante_cpf}}, doravante denominada como CONTRATANTE.
+
+CONTRATADO: {{contratado_empresa}}, inscrita no CNPJ sob o nº {{contratado_cnpj}}, com sede em {{contratado_endereco}}, neste ato representada por sua sócia e representante legal {{contratado_nome}}, {{contratado_nacionalidade}}, {{contratado_estado_civil}}, empresária, inscrita no CPF nº {{contratado_cpf}}, doravante denominada como CONTRATADA.
+
+As partes acima qualificadas, por seus representantes legais ao final assinados, firmam o presente instrumento que se regerá pelas cláusulas seguintes e pelas condições descritas no presente.
+
+RS_SECTION: OBJETO
+
+O presente contrato tem por objeto a prestação, pela CONTRATADA, de serviços de consultoria empresarial na área de Recursos Humanos, com ênfase em atração e seleção de talentos para CONTRATANTE, sendo utilizado na execução dos serviços, mão de obra técnica especializada, mediante planejamento de atividades, bem como capacitada, a utilizar-se de mecanização e tecnologia, quando for necessário para a boa execução dos serviços, conforme descritivo abaixo:
+
+{{vagas_descricao}}
+
+A CONTRATADA prestará parte dos serviços em suas próprias instalações. Para a prestação dos serviços nas dependências da CONTRATANTE, deverá obter autorização de acesso, bem como serão considerados serviços extras.
+
+O processo de avaliação dos candidatos será feito, com base no perfil da vaga definida e validada pelo CONTRATANTE.
+
+RS_SECTION: OBRIGAÇÕES DA CONTRATADA
+
+São obrigações da Contratada:
+
+RS_ITEM: Programar e executar os serviços de acordo com as condições estabelecidas neste contrato, com a observância dos prazos estipulados;
+RS_ITEM: Manter a CONTRATANTE informada a respeito do andamento dos serviços realizados, bem como sobre fatos de seu interesse, relacionados ao objeto do presente contrato.
+RS_ITEM: Executar os serviços pelos mais modernos e desenvolvidos métodos conhecidos e adotados pelo mercado, com autonomia e técnica, obedecendo todos os requisitos aplicáveis ao segmento; Contudo, a responsabilidade da CONTRATADA se limita à condução do processo de seleção conforme o perfil estabelecido pela CONTRATANTE, não sendo responsável por qualquer ato, conduta ou desempenho do candidato selecionado e contratado pela CONTRATANTE.
+RS_ITEM: Cumprir com o Código de Ética e de Conduta da empresa dentro e fora das suas instalações.
+RS_ITEM: Selecionar e encaminhar para a CONTRATANTE candidatos que atendam ao perfil da vaga para sua avaliação.
+RS_ITEM: A CONTRATADA concede à CONTRATANTE garantia de reposição do candidato sem custo adicional caso o mesmo não permaneça na posição pelo prazo inferior a 30 (trinta) dias, contados da data de início do candidato na empresa. Se o candidato ficar por período igual ou superior a 30 (trinta) dias não terá reposição. Caso a CONTRATANTE opte por não realizar a reposição, o valor correspondente ao serviço prestado não será reembolsado.
+
+RS_SECTION: OBRIGAÇÕES DA CONTRATANTE
+
+Para que a CONTRATADA possa bem e fielmente cumprir com as suas obrigações, retro descritas como objeto deste contrato, a CONTRATANTE obriga-se a:
+
+RS_ITEM: Pagar diretamente à CONTRATADA, nos prazos e formas ajustados, conforme as condições previstas neste contrato.
+RS_ITEM: Fornecer, em tempo hábil, os documentos, descrições, informações e elementos suficientes e necessários à execução dos serviços contratados.
+RS_ITEM: A CONTRATANTE autoriza a CONTRATADA a publicar as vagas anunciadas (não confidenciais) no site da CONTRATADA, redes sociais, jornais e meios de comunicação que possam auxiliar no processo de captação de currículos para a vaga em aberto, preservando o sigilo quanto ao nome da empresa nos anúncios. A responsabilidade pela confidencialidade da vaga é do CONTRATANTE, o qual fará a opção no momento do alinhamento do perfil.
+RS_ITEM: A CONTRATANTE fica responsável em conceder retorno à CONTRATADA referente às entrevistas de seleção realizadas com os candidatos encaminhados.
+RS_ITEM: Fica a cargo do CONTRATANTE a observação da legislação em vigor, bem como arcar pelas despesas decorrentes das obrigações trabalhistas e tributárias da contratação de novos colaboradores.
+
+RS_SECTION: PREÇO E CONDIÇÕES DE PAGAMENTO
+
+{{descricao_vagas_valores}}
+
+O pagamento será realizado em duas etapas: 50% (cinquenta por cento) no início do processo, no valor de R$ {{valor_entrada}},00 ({{valor_entrada_extenso}}) e 50% (cinquenta por cento) no ato da contratação do colaborador, no valor de R$ {{valor_final}},00 ({{valor_final_extenso}}).
+
+A análise de Perfil Comportamental DISC será cobrada à parte, no valor de R$ {{valor_disc}},00 ({{valor_disc_extenso}}) por candidato avaliado.
+
+Em caso de atraso no pagamento de qualquer valor devido pela CONTRATANTE à CONTRATADA, será aplicada uma multa de 2% (dois por cento) sobre o valor da parcela em atraso, além de juros de mora de 1% (um por cento) ao mês, calculados pro rata die.
+
+Não havendo o pagamento em até 5 (cinco) dias da primeira parcela, os serviços serão suspensos até que ocorra o efetivo pagamento, não ocorrendo o pagamento da diferença que sobejar ao término do objeto contratual, o boleto emitido será automaticamente enviado aos órgãos de proteção de crédito.
+
+As despesas diretas ou indiretas, tais como, anúncios específicos e personalizados, contratações de sistemas integralizados, transporte, estacionamentos, hospedagens, refeições em viagens, para atendimento ao objeto do contrato serão de responsabilidade da CONTRATANTE.
+
+Todos os tributos e contribuições incidentes sobre quaisquer atos, fatos e/ou situações previstas neste contrato deverão ser suportados pelo respectivo contribuinte ou responsável tributário, devendo para tanto ser realizado o pagamento de todos os tributos federais, estaduais e municipais que incidam ou venham a incidir sobre os mesmos.
+
+RS_SECTION: DESISTÊNCIA
+
+Caso haja cancelamento ou suspensão do processo, por parte da CONTRATANTE após a assinatura do contrato e antes das entrevistas com os candidatos, o valor devido será de 30% (trinta por cento) do valor total do contrato.
+
+Caso haja cancelamento ou suspensão do processo, por parte da CONTRATANTE, após a assinatura do contrato e após a seleção e encaminhamento dos candidatos à entrevista, será cobrado o valor total estabelecido entre as partes.
+
+Em caso de alteração do perfil da vaga a pedido da CONTRATANTE após o início do processo seletivo, as partes se comprometem a renegociar os termos do serviço definindo novos valores e prazos. Caso não haja consenso quanto à negociação, o processo seletivo será considerado encerrado e a CONTRATADA fará jus à retenção do percentual de 50% (cinquenta por cento) recebido de cada vaga, em razão do trabalho realizado.
+
+RS_SECTION: PRAZO E RESCISÃO
+
+O presente contrato terá duração de {{prazo_meses}} meses, iniciando-se a partir da data da assinatura do contrato por ambas as partes, podendo ser prorrogado de comum acordo pelas referidas partes por meio de aditivo.
+
+O presente contrato poderá ser considerado extinto por qualquer das partes, a qualquer tempo, através de comunicação expressa, por escrito, com no mínimo 15 (quinze) dias de antecedência, período em que as obrigações previstas neste instrumento continuam válidas e exigíveis, nos termos da presente cláusula. Nesta hipótese a extinção contratual só será efetivada, quando todas as entregas pendentes à época da comunicação, forem efetivamente concluídas.
+
+O presente contrato poderá ser considerado rescindido, de pleno direito e independente do pagamento de multa nos seguintes casos:
+
+RS_ITEM: Se qualquer das partes vier a ter sua falência ou recuperação judicial requerida ou, ainda, em caso de insolvência, sem que, em tempo hábil, apresente as comprovações devidas;
+RS_ITEM: Se qualquer das partes descumprir quaisquer cláusulas deste contrato e desde que não solucionada a pendência em até 15 (quinze) dias corridos do recebimento de notificação, salvo quando se tratar de obrigação sobre a qual divergem as partes acerca do entendimento; hipótese em que a multa só será devida se reconhecido o descumprimento contratual por decisão judicial transitada em julgado;
+RS_ITEM: Se a CONTRATADA, por qualquer razão, perder a qualificação técnica que a habilita a prestar os serviços objeto deste contrato;
+RS_ITEM: Por denúncia por qualquer das partes com efeito imediato;
+RS_ITEM: Quebra das obrigações de sigilo e confidencialidade;
+RS_ITEM: Força maior ou caso fortuito.
+
+Na hipótese de encerramento do presente instrumento, a CONTRATANTE deverá quitar os valores devidos à CONTRATADA, em pro rata die, até a data da extinção deste instrumento.
+
+As disposições da Cláusula de Sigilo, Propriedade Intelectual, LGPD e eventuais penalidades sobreviverão à rescisão do presente Contrato e permanecerão em pleno vigor e efeito.
+
+RS_SECTION: PRAZO PARA REALIZAÇÃO DE ENTREVISTAS
+
+A CONTRATANTE compromete-se em garantir que o seu gestor irá realizar as entrevistas com os candidatos finalistas encaminhados pela CONTRATADA no prazo máximo de 7 (sete) dias úteis contados a partir do recebimento das indicações. O descumprimento deste prazo implicará no cancelamento automático da vaga, sem geração de quaisquer ônus adicionais à CONTRATADA, assim como não haverá reembolso dos valores já pagos. Caso a vaga seja cancelada nos termos desta cláusula, para o reinício do processo de recrutamento e seleção será necessário formalizar um novo contrato, com novo pagamento de 50% (cinquenta por cento) do valor total ajustado.
+
+Após a realização das entrevistas finais, a CONTRATANTE terá o prazo máximo de 7 (sete) dias úteis para fornecer o retorno formal à CONTRATADA sobre a aprovação ou não dos candidatos. O não cumprimento deste prazo resultará no cancelamento automático da vaga, sem direito à devolução do valor correspondente a 50% (cinquenta por cento) do montante pago inicialmente. Para o reinício do processo de recrutamento e seleção, será necessário firmar um novo contrato, com novo pagamento de 50% (cinquenta por cento) do valor total ajustado.
+
+RS_SECTION: RELACIONAMENTO ENTRE AS PARTES
+
+As partes declaram que este Contrato não as vincula em nenhum outro aspecto que não o contrato de prestação de serviços ora acordado. As partes concordam em resguardar os interesses da outra parte contra qualquer responsabilidade oriunda do reconhecimento de vínculo empregatício ou despesas e encargos empregatícios, sociais ou securitários em relação aos sócios, empregados, prepostos e/ou subcontratados de uma das partes. Nesse sentido, este instrumento não cria ou estabelece margem a qualquer vínculo empregatício entre as partes.
+
+Todo pessoal contratado por uma das partes deverá ser pago pela mesma e nenhum deles terá qualquer relação contratual ou de emprego com a outra parte, não caracterizando responsabilidade, de qualquer natureza, junto aos mencionados trabalhadores.
+
+RS_SECTION: CONFIDENCIALIDADE
+
+As partes reconhecem que poderão receber ou ter a posse de certas informações e documentos confidenciais, incluindo-se informações de seus clientes, empregados, fornecedores, representantes e sócios, ("Informações Confidenciais") durante o prazo de validade deste contrato, informações de natureza administrativa, gerencial e financeira, informações legais, demonstrações financeiras, e quaisquer outras informações relativas a suas atividades.
+
+As partes se comprometem a manter sigilo absoluto sobre todas as informações trocadas durante a vigência do contrato, incluindo dados pessoais dos candidatos, estratégias de recrutamento e seleção, e informações confidenciais da CONTRATANTE.
+
+As Informações Confidenciais descritas acima não incluirão quaisquer informações que uma das partes possa provar ser (i) de domínio público anteriormente ao seu recebimento, desde que a outra parte não tenha contribuído, de maneira irregular, à sua revelação; ou (ii) a si disponível, ou em suas mãos, anteriormente à data em que tal informação for obtida.
+
+As partes, por si, seus representantes, expressamente acordam e se obrigam a: (i) não divulgar, revelar ou fornecer, seja no todo ou em parte, as Informações Confidenciais a terceiros, a não ser que expressamente autorizada por escrito pela outra parte; tal autorização será considerada válida apenas se assinada pelo representante legal da outra parte; (ii) envidar os melhores esforços para evitar a divulgação indevida das Informações Confidenciais a terceiros; (iii) notificar um representante da outra parte, caso tome conhecimento de divulgações indevidas de quaisquer Informações Confidenciais; e, (iv) não copiar, nem usar, ou permitir que terceiros copiem ou usem, as Informações Confidenciais, direta ou indiretamente, exceto na conformidade das disposições e limites deste contrato e de seus anexos.
+
+Na hipótese do término ou rescisão deste Contrato, as partes cessarão imediatamente o uso de quaisquer Informações Confidenciais, independentemente de notificação, e devolverão à outra parte todas as Informações Confidenciais. A despeito do acima, as obrigações de confidencialidade aqui estabelecidas permanecerão em vigor mesmo após o término ou a rescisão deste contrato, durante prazo de 12 (doze) meses após a rescisão contratual.
+
+RS_SECTION: DISPOSIÇÕES FINAIS
+
+RS_ITEM: O presente contrato representa o acordo integral entre as partes no que se refere ao serviço ora contratado e substitui todos os acordos anteriores, quer expressos ou tácitos. Este contrato somente poderá ser alterado por meio de um documento escrito assinado por ambas as partes.
+RS_ITEM: Os direitos autorais patrimoniais de todos os materiais produzidos pela CONTRATADA no âmbito da prestação dos serviços objeto deste contrato permanecerão de propriedade exclusiva da CONTRATADA, salvo disposição em contrário acordada pelas partes por escrito.
+RS_ITEM: Durante a vigência do presente contrato e por um período de 01 (um) ano após sua rescisão, a CONTRATANTE se compromete a não persuadir fornecedores da CONTRATADA deixar de atendê-la; Induzir clientes a reduzir ou cancelar negócios; ou Aliciar especialistas, clientes, fornecedores ou colaboradores da CONTRATADA.
+RS_ITEM: As partes se comprometem a cumprir todas as disposições da Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018 - LGPD), garantindo a proteção dos dados pessoais tratados no âmbito deste contrato. A CONTRATADA realizará o tratamento de dados pessoais exclusivamente para os fins da execução do presente contrato, com base nas instruções da CONTRATANTE, que declara ter obtido o consentimento necessário para compartilhar tais dados. A CONTRATADA adotará medidas de segurança adequadas para proteger os dados pessoais contra acessos não autorizados, vazamentos e outros incidentes. Em caso de incidente, a CONTRATADA notificará a CONTRATANTE para que sejam tomadas as devidas providências. A responsabilidade pela conformidade com a LGPD em relação aos dados fornecidos à CONTRATADA será da CONTRATANTE, salvo quando comprovado o tratamento indevido diretamente pela CONTRATADA. Após o término do contrato, as obrigações de proteção e sigilo de dados pessoais permanecem válidas enquanto os dados estiverem sob posse de qualquer uma das partes.
+RS_ITEM: A CONTRATANTE não poderá contratar diretamente qualquer candidato apresentado pela CONTRATADA durante o processo seletivo por um período de 6 (seis) meses, contados da data da apresentação. Em caso de contratação direta, a CONTRATANTE será responsável pelo pagamento de uma multa equivalente a 100% (cem por cento) do valor da remuneração mensal do colaborador contratado. A CONTRATANTE se compromete a notificar a CONTRATADA imediatamente em caso de contratação direta de candidato, sob pena de aplicação de multa adicional de 10% (dez por cento) sobre o valor da remuneração do colaborador.
+RS_ITEM: Todas as notificações, avisos e comunicações relacionadas a este Contrato deverão ser feitos por escrito, e serão considerados recebidos de forma digital, bastando a comunicação formal por e-mail, sendo utilizados, em todos os casos, os endereços mencionados no preâmbulo.
+RS_ITEM: Qualquer das partes poderá alterar seu endereço e pessoa de contato através do envio de uma simples comunicação à outra parte em conformidade com as disposições estabelecidas neste instrumento, sob pena de reputarem-se válidas as comunicações efetuadas no endereço anterior.
+RS_ITEM: Nenhuma das partes poderá ceder e/ou transferir os direitos ou as obrigações decorrentes deste contrato a terceiros, salvo mediante concordância da outra parte.
+RS_ITEM: Os Serviços contratados nos termos deste instrumento, não concederão às PARTES qualquer direito a contrair obrigações com terceiros em nome da outra.
+RS_ITEM: As partes expressamente declaram que o presente contrato de prestação de serviços não cria entre elas, nem entre a CONTRATADA ou terceiros por ela contratados, qualquer tipo de vínculo empregatício, estando a CONTRATANTE eximida de qualquer responsabilidade relativa a esse tipo de vínculo.
+RS_ITEM: As Partes Afirmam e declaram que esse poderá ser assinado eletronicamente através da plataforma Gov.br, à qual reconhecem que confere segurança quanto à comprovação da autoria e integridade com fundamento no Artigo 10, parágrafo 2º da MP 2200-2/2001, e do Artigo 6º do Decreto 10.278/2020, sendo as assinaturas consideradas válidas, vinculantes e executáveis, renunciando as partes renunciam à possibilidade de exigir a troca, envio ou entrega de vias não-eletrônicas assinadas fisicamente do instrumento. As partes dispensam, nesta oportunidade, a assinatura de duas testemunhas neste instrumento, com base no §4º do art. 784 do CPC, mantendo-se, no entanto, a natureza de Título Executivo Extrajudicial.
+RS_ITEM: As partes elegem, de comum acordo, o Foro Central da Comarca da Capital do {{foro_estado}} como único competente, com expressa renúncia de qualquer outro, por mais privilegiado que seja, para dirimir eventuais questões oriundas do presente contrato.
+
+E por estarem assim justas e contratadas, as partes assinam o presente instrumento na forma da cláusula 9.11 supra, para todos os efeitos legais.
+
+RS_ASSINATURAS: {{cidade_assinatura}}, {{data_assinatura_formatada}}

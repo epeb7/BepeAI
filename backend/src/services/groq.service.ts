@@ -908,6 +908,7 @@ REGRAS ABSOLUTAS
 
 const NOMES_WORKFLOW: Record<string, string> = {
   contrato:           'Contrato de Prestação de Serviços',
+  contrato_rs:        'Contrato de R&S (Recrutamento e Seleção)',
   proposta_comercial: 'Proposta Comercial',
   orcamento:          'Orçamento',
   relatorio_final:    'Relatório Final',
@@ -998,6 +999,7 @@ Tom: profissional, acolhedor, direto. Máximo 10 linhas.`;
     case 'inicio_workflow': {
       const NOMES_DOCUMENTO: Record<string, string> = {
         contrato:           'Contrato de Prestação de Serviços',
+        contrato_rs:        'Contrato de Recrutamento e Seleção',
         proposta_comercial: 'Proposta Comercial',
         orcamento:          'Orçamento',
         relatorio_final:    'Relatório Final',
@@ -1005,6 +1007,7 @@ Tom: profissional, acolhedor, direto. Máximo 10 linhas.`;
       };
       const CONTEXTO_DOCUMENTO: Record<string, string> = {
         contrato:           'Este contrato formaliza a prestação de serviços entre duas empresas, protegendo ambas as partes quanto a escopo, pagamento, prazo e propriedade intelectual.',
+        contrato_rs:        'Este contrato formaliza a prestação de serviços de consultoria em Recrutamento e Seleção de talentos, com cláusulas específicas para garantia de reposição, prazos de entrevista e DISC.',
         proposta_comercial: 'Esta proposta é uma oferta formal com validade definida — se aceita, origina um contrato. É o seu cartão de visitas comercial.',
         orcamento:          'Este orçamento detalha custos e condições para aprovação — não é um contrato, mas é o primeiro passo formal para fechar negócio.',
         relatorio_final:    'Este relatório consolida atividades e resultados de um período — fundamental para compliance, prestação de contas e auditorias.',

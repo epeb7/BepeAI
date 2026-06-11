@@ -94,14 +94,10 @@ CREATE TABLE IF NOT EXISTS token_blacklist (
 CREATE INDEX IF NOT EXISTS idx_token_blacklist_expires
   ON token_blacklist (expires_at);
 
--- ── 7. Limpeza automática via pg_cron (opcional) ──────────────
--- Habilitar em: Supabase Dashboard → Database → Extensions → pg_cron
--- Remove tokens expirados da blacklist diariamente às 03:00
--- SELECT cron.schedule('cleanup-token-blacklist', '0 3 * * *',
---   $$DELETE FROM token_blacklist WHERE expires_at < NOW()$$);
--- Remove sessões expiradas diariamente às 03:05
--- SELECT cron.schedule('cleanup-workflow-sessions', '5 3 * * *',
---   $$DELETE FROM workflow_sessions WHERE expires_at < NOW()$$);
+-- ── 7. Limpeza automática via pg_cron ────────────────────────
+-- Ver: docs/migration_cron_cleanup.sql
+-- Ativar a extensão pg_cron primeiro:
+--   Supabase Dashboard → Database → Extensions → pg_cron → Enable
 
 -- ── 8. Row Level Security (RLS) ───────────────────────────────
 -- Como o backend usa a service_role key, o RLS não bloqueia as

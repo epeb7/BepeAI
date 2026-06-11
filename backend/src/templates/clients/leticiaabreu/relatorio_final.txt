@@ -1,0 +1,49 @@
+RELATÓRIO FINAL
+
+EMPRESA: {{empresa}}, inscrita no CNPJ/MF sob o nº {{cnpj}}.
+
+RESPONSÁVEL: {{responsavel}}, {{cargo_responsavel}}.
+
+RS_SECTION: IDENTIFICAÇÃO
+
+O presente relatório, intitulado "{{titulo_relatorio}}", consolida as atividades, resultados e conclusões do período compreendido entre {{data_inicio}} e {{data_fim}}, referente às operações conduzidas pela {{empresa}}, sendo elaborado por {{responsavel}}, na qualidade de {{cargo_responsavel}}.
+
+Este documento tem caráter confidencial e destina-se exclusivamente ao uso interno da {{empresa}} e às partes expressamente autorizadas. Sua reprodução ou divulgação parcial ou integral a terceiros requer autorização formal da diretoria.
+
+RS_SECTION: SUMÁRIO EXECUTIVO
+
+{{resumo_executivo}}
+
+O sumário acima sintetiza os principais eventos, decisões e contextos que pautaram as atividades do período, servindo de referência para a compreensão dos resultados detalhados a seguir.
+
+RS_SECTION: PRINCIPAIS RESULTADOS
+
+Os resultados alcançados no período de {{data_inicio}} a {{data_fim}} foram:
+
+RS_ITEM: {{principais_resultados}}.
+
+Os resultados acima refletem o desempenho das iniciativas implementadas pela equipe da {{empresa}} ao longo do período analisado.
+
+Os indicadores apurados devem ser analisados em conjunto com as condições de mercado vigentes no período, conforme contextualização apresentada no Sumário Executivo.
+
+RS_SECTION: CONCLUSÕES E RECOMENDAÇÕES
+
+Com base nas análises realizadas e nos resultados obtidos, recomenda-se para o próximo período:
+
+{{recomendacoes}}
+
+As recomendações acima foram elaboradas considerando os indicadores de desempenho apurados, as tendências de mercado identificadas e os objetivos estratégicos da {{empresa}}.
+
+A implementação das recomendações descritas deverá ser acompanhada por cronograma de execução, designação de responsáveis e definição de métricas de acompanhamento, a serem estabelecidos em plano de ação específico.
+
+RS_SECTION: METODOLOGIA E FONTES
+
+As análises contidas neste relatório foram elaboradas com base em dados internos da {{empresa}}, pesquisa documental e observação direta das operações, assegurando a fidedignidade e rastreabilidade das informações apresentadas.
+
+Em caso de divergência entre as informações deste relatório e outros registros internos, prevalecerão os dados primários devidamente documentados e homologados pelo responsável pela elaboração.
+
+RS_SECTION: APROVAÇÃO E ARQUIVAMENTO
+
+O presente relatório está sujeito à aprovação formal da direção da {{empresa}}, devendo ser arquivado em conformidade com as políticas internas de gestão documental, com prazo de retenção mínimo de 5 (cinco) anos.
+
+RS_ASSINATURAS: {{data_fim}}

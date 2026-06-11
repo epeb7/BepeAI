@@ -1,0 +1,57 @@
+PROPOSTA COMERCIAL
+
+EMITENTE: {{emitente_empresa}}, inscrita no CNPJ sob o nº {{emitente_cnpj}}, com sede em {{emitente_endereco}}, {{emitente_cidade}} - {{emitente_estado}}, neste ato representada por {{emitente_responsavel}}, {{emitente_cargo}}, e-mail: {{emitente_email}}, telefone: {{emitente_telefone}}.
+
+DESTINATÁRIO: {{cliente_empresa}}, inscrita no CNPJ/MF sob o nº {{cliente_cnpj}}, aos cuidados de {{cliente_responsavel}}.
+
+RS_SECTION: APRESENTAÇÃO
+
+{{emitente_empresa}} apresenta à {{cliente_empresa}} a presente Proposta Comercial, elaborada a partir das necessidades identificadas durante o processo de levantamento de requisitos, com o compromisso de entregar soluções de excelência dentro dos padrões técnicos e prazos acordados.
+
+Esta proposta foi elaborada exclusivamente para {{cliente_empresa}} e suas condições são confidenciais, não podendo ser reproduzida ou utilizada por terceiros sem autorização expressa do emitente.
+
+RS_SECTION: OBJETO
+
+Os serviços objeto desta proposta compreendem: {{descricao_servicos}}.
+
+O escopo detalhado das entregas inclui: {{escopo_detalhado}}.
+
+Qualquer serviço adicional não descrito no escopo desta proposta será objeto de aditivo escrito, com revisão de prazo e valor previamente acordados entre as partes.
+
+RS_SECTION: CONDIÇÕES FINANCEIRAS
+
+O valor total para a execução dos serviços descritos nesta proposta é de R$ {{valor_total_proposta}} ({{valor_total_proposta_extenso}}).
+
+A forma de pagamento acordada será: {{forma_pagamento}}.
+
+Os valores propostos são líquidos e incluem todos os custos operacionais do emitente, exceto tributos e encargos de responsabilidade exclusiva do contratante, salvo disposição em contrário expressa.
+
+Em caso de atraso no pagamento, incidirão multa de 2% (dois por cento) sobre o valor em atraso, acrescida de juros moratórios de 1% (um por cento) ao mês, pro rata die.
+
+RS_SECTION: PRAZO DE ENTREGA
+
+O prazo estimado para conclusão e entrega dos serviços é de {{prazo_entrega}}, contado a partir da data de confirmação e assinatura formal desta proposta.
+
+O prazo acima está condicionado à entrega pontual de todas as informações, acessos e materiais necessários por parte do contratante. Atrasos provocados por insuficiência ou ausência de insumos do contratante resultarão em reprogramação proporcional do cronograma.
+
+RS_SECTION: VALIDADE
+
+A presente proposta é válida pelo prazo de {{validade_proposta}} dias corridos contados da data de emissão indicada neste documento.
+
+Após o vencimento desta validade, os valores e condições aqui descritos poderão ser revisados sem aviso prévio, em razão de variações de custos, câmbio ou demanda.
+
+RS_SECTION: CONDIÇÕES GERAIS
+
+RS_ITEM: Alterações de escopo solicitadas pelo contratante após a confirmação desta proposta serão avaliadas e, se necessário, gerarão aditivo com revisão de prazo e valor;
+RS_ITEM: A prestação dos serviços será regida por contrato específico a ser firmado após aceite desta proposta;
+RS_ITEM: {{emitente_empresa}} poderá subcontratar parte dos serviços, mantendo integral responsabilidade pela qualidade e prazo da entrega;
+RS_ITEM: As partes comprometem-se a manter em sigilo os termos desta proposta e as informações trocadas durante a negociação;
+RS_ITEM: Esta proposta não gera qualquer obrigação para o destinatário até sua confirmação formal.
+
+RS_SECTION: ACEITE
+
+A confirmação desta proposta deve ser realizada por escrito, por e-mail ou assinatura deste documento, configurando aceite integral de todos os termos e condições aqui estabelecidos.
+
+Aceita a proposta, as partes providenciarão, no prazo de até 5 (cinco) dias úteis, a celebração do instrumento contratual formal que regerá a prestação dos serviços.
+
+RS_ASSINATURAS: {{cidade_emissao}}, {{data_emissao}}

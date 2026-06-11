@@ -1,0 +1,50 @@
+ORÇAMENTO
+
+EMITENTE: {{empresa_emitente}}, pessoa jurídica de direito privado, inscrita no CNPJ/MF sob o nº {{cnpj_emitente}}, com sede em {{endereco_emitente}}, responsável: {{responsavel_emitente}}, telefone: {{telefone_emitente}}.
+
+SOLICITANTE: {{cliente_nome}}, CNPJ/CPF: {{cliente_cnpj_cpf}}.
+
+RS_SECTION: OBJETO
+
+O presente orçamento refere-se ao fornecimento dos seguintes produtos e/ou serviços: {{descricao_itens}}.
+
+O presente orçamento é emitido com base nas especificações fornecidas pelo Solicitante, sendo responsabilidade deste a verificação da completude e exatidão das informações prestadas.
+
+RS_SECTION: COMPOSIÇÃO DE VALORES
+
+RS_ITEM: Descrição: {{descricao_itens}};
+RS_ITEM: Quantidade/Unidade: {{quantidade_unidade}};
+RS_ITEM: Valor unitário: R$ {{valor_unitario}} ({{valor_unitario_extenso}});
+RS_ITEM: Valor total: R$ {{valor_total_orcamento}} ({{valor_total_orcamento_extenso}}).
+
+Os valores apresentados incluem todos os custos necessários para a realização completa do escopo descrito, exceto tributos e encargos de responsabilidade exclusiva do solicitante, salvo disposição expressa em contrário.
+
+Os preços constantes deste orçamento são fixos e irreajustáveis durante o prazo de validade estabelecido.
+
+RS_SECTION: PRAZO DE EXECUÇÃO
+
+O prazo estimado para execução e/ou entrega é de {{prazo_execucao}}, contado a partir da data de aceite e pagamento inicial conforme condições definidas.
+
+O prazo acima pressupõe a disponibilização imediata, pelo Solicitante, de todos os materiais, informações e acessos necessários à execução. Eventuais atrasos na entrega desses insumos resultarão em reprogramação proporcional do cronograma.
+
+RS_SECTION: CONDIÇÕES DE PAGAMENTO
+
+Forma de pagamento: {{forma_pagamento}}.
+
+O não pagamento no prazo acordado ensejará a incidência de multa moratória de 2% (dois por cento) sobre o valor em aberto, acrescida de juros moratórios de 1% (um por cento) ao mês, calculados pro rata die.
+
+RS_SECTION: VALIDADE
+
+Este orçamento é válido por {{validade_orcamento}} dias corridos a partir da data de emissão.
+
+RS_ITEM: Os valores poderão sofrer reajuste após o prazo de validade, conforme variação dos custos de insumos, mão de obra e índices de mercado;
+RS_ITEM: Alterações de escopo solicitadas pelo contratante implicarão revisão dos valores apresentados e novo orçamento;
+RS_ITEM: Este orçamento não constitui contrato, sendo necessária a formalização por instrumento próprio após aceite.
+
+RS_SECTION: RESPONSABILIDADES E GARANTIAS
+
+RS_ITEM: O emitente garante que os produtos e serviços descritos neste orçamento atendem às especificações técnicas indicadas;
+RS_ITEM: Eventuais vícios ou defeitos verificados no prazo de garantia legal serão corrigidos sem ônus ao Solicitante;
+RS_ITEM: O Solicitante é responsável pela correta utilização dos produtos e serviços adquiridos, não cabendo ao Emitente responsabilidade por danos decorrentes de uso inadequado.
+
+RS_ASSINATURAS: {{data_emissao}}

@@ -380,14 +380,87 @@ const ndaGroups: FieldGroup[] = [
   },
 ];
 
+// ============================================================
+// CONTRATO DE R&S — Leticia Abreu Recrutamento e Seleção
+// 18 campos → 5 grupos
+// ============================================================
+
+const contratoRsSteps: WorkflowStep[] = [
+  // CONTRATANTE
+  { field: 'contratante_empresa',    label: 'Razão social',            question: 'Razão social da empresa CONTRATANTE:',             required: true, example: 'Tech Soluções Ltda',         validator: validators.nomeEmpresa, errorMessage: 'Nome inválido (mín. 2 caracteres)' },
+  { field: 'contratante_cnpj',       label: 'CNPJ',                    question: 'CNPJ da CONTRATANTE (14 dígitos):',                 required: true, example: '12345678000199',              validator: validators.cnpj,        errorMessage: 'CNPJ deve ter exatamente 14 dígitos' },
+  { field: 'contratante_endereco',   label: 'Endereço',                question: 'Endereço da CONTRATANTE (logradouro e número):',    required: true, example: 'Rua das Flores, 123' },
+  { field: 'contratante_email',      label: 'E-mail',                  question: 'E-mail da CONTRATANTE:',                           required: true, example: 'contato@empresa.com.br' },
+  { field: 'contratante_nome',       label: 'Representante legal',     question: 'Nome do representante legal da CONTRATANTE:',       required: true, example: 'João Silva' },
+  { field: 'contratante_cpf',        label: 'CPF',                     question: 'CPF do representante (11 dígitos):',                required: true, example: '12345678901',                  validator: validators.cpf,        errorMessage: 'CPF deve ter exatamente 11 dígitos' },
+  // CONTRATADA (dados fixos da Leticia — coletados mas pré-sugeridos pela IA)
+  { field: 'contratado_empresa',     label: 'Empresa CONTRATADA',      question: 'Razão social da empresa CONTRATADA:',              required: true, example: 'Leticia Abreu Consultoria Ltda', validator: validators.nomeEmpresa },
+  { field: 'contratado_cnpj',        label: 'CNPJ da CONTRATADA',      question: 'CNPJ da CONTRATADA (14 dígitos):',                 required: true, example: '98765432000188',                validator: validators.cnpj,       errorMessage: 'CNPJ deve ter exatamente 14 dígitos' },
+  { field: 'contratado_endereco',    label: 'Endereço da CONTRATADA',  question: 'Endereço da CONTRATADA:',                          required: true, example: 'Av. Rio Branco, 500' },
+  { field: 'contratado_nome',        label: 'Representante CONTRATADA', question: 'Nome da representante legal da CONTRATADA:',      required: true, example: 'Leticia Abreu' },
+  { field: 'contratado_nacionalidade', label: 'Nacionalidade',         question: 'Nacionalidade da representante:',                  required: true, example: 'Brasileira' },
+  { field: 'contratado_estado_civil',  label: 'Estado civil',          question: 'Estado civil da representante:',                   required: true, example: 'Casada' },
+  { field: 'contratado_cpf',         label: 'CPF da representante',    question: 'CPF da representante (11 dígitos):',               required: true, example: '98765432100',                   validator: validators.cpf,        errorMessage: 'CPF deve ter exatamente 11 dígitos' },
+  // VAGAS E VALORES
+  { field: 'vagas_descricao',           label: 'Vagas',                question: 'Descreva as vagas (cargo e faixa salarial de cada uma):',  required: true, example: 'Gerente de Atendimento, salário R$7.000 a R$8.500' },
+  { field: 'descricao_vagas_valores',   label: 'Investimento por vaga', question: 'Descreva o investimento por vaga e total:',               required: true, example: 'Gerente de Atendimento: R$10.000. Total: R$20.000' },
+  { field: 'valor_entrada',             label: 'Valor entrada (50%)',   question: 'Valor da parcela de entrada (50% do total):',              required: true, example: '10000',                     validator: validators.valor,      errorMessage: 'Informe apenas o número (ex: 10000)' },
+  { field: 'valor_final',               label: 'Valor final (50%)',     question: 'Valor da parcela na contratação (50% restante):',          required: true, example: '10000',                     validator: validators.valor,      errorMessage: 'Informe apenas o número (ex: 10000)' },
+  { field: 'valor_disc',                label: 'DISC (por candidato)',  question: 'Valor da avaliação DISC por candidato:',                   required: true, example: '500',                       validator: validators.valor,      errorMessage: 'Informe apenas o número (ex: 500)' },
+  // ENCERRAMENTO
+  { field: 'prazo_meses',            label: 'Prazo (meses)',           question: 'Prazo do contrato em meses:',                      required: true, example: '2' },
+  { field: 'foro_estado',            label: 'Estado do foro',          question: 'Estado do foro judicial (ex: Rio de Janeiro):',    required: true, example: 'Rio de Janeiro' },
+  { field: 'cidade_assinatura',      label: 'Cidade de assinatura',    question: 'Cidade de assinatura do contrato:',                required: true, example: 'Rio de Janeiro' },
+  { field: 'data_assinatura',        label: 'Data de assinatura',      question: 'Data de assinatura (DD/MM/AAAA):',                 required: true, example: '26/03/2025',                   validator: validators.data,        errorMessage: 'Formato inválido. Use DD/MM/AAAA' },
+];
+
+const contratoRsGroups: FieldGroup[] = [
+  {
+    id: 'rs_contratante',
+    label: 'Dados da Empresa Contratante',
+    question: '🏢 Vamos começar pelos dados da empresa **CONTRATANTE** — quem está contratando o processo seletivo.\n\nEssas informações identificam a empresa no contrato. O CNPJ pode ser informado com ou sem pontuação.\n\n• **Razão social:**\n• **CNPJ:** (14 dígitos)\n• **Endereço:** (logradouro e número)\n• **E-mail:**\n• **Nome do representante legal:**\n• **CPF do representante:** (11 dígitos)',
+    fields: ['contratante_empresa', 'contratante_cnpj', 'contratante_endereco', 'contratante_email', 'contratante_nome', 'contratante_cpf'],
+    example: 'Exemplo:\nRazão social: Tech Soluções Ltda\nCNPJ: 12.345.678/0001-99\nEndereço: Rua das Flores, 123\nE-mail: rh@techsolucoes.com.br\nRepresentante: João Silva\nCPF: 123.456.789-01',
+  },
+  {
+    id: 'rs_contratada',
+    label: 'Dados da Contratada (Leticia Abreu)',
+    question: '🏢 Agora os dados da empresa **CONTRATADA** — a empresa que irá realizar o processo seletivo.\n\n• **Razão social da empresa:**\n• **CNPJ:**\n• **Endereço:**\n• **Nome da representante legal:**\n• **Nacionalidade:**\n• **Estado civil:**\n• **CPF da representante:**',
+    fields: ['contratado_empresa', 'contratado_cnpj', 'contratado_endereco', 'contratado_nome', 'contratado_nacionalidade', 'contratado_estado_civil', 'contratado_cpf'],
+    example: 'Exemplo:\nRazão social: Leticia Abreu Consultoria Ltda\nCNPJ: 98.765.432/0001-88\nEndereço: Av. Rio Branco, 500\nRepresentante: Leticia Abreu\nNacionalidade: Brasileira\nEstado civil: Casada\nCPF: 987.654.321-00',
+  },
+  {
+    id: 'rs_vagas',
+    label: 'Vagas a Preencher',
+    question: '📋 Quais são as **vagas** que serão trabalhadas neste processo seletivo?\n\nInforme o cargo e a faixa salarial de cada vaga. Esses dados constam no objeto do contrato.\n\n**Descreva as vagas (uma por linha):**',
+    fields: ['vagas_descricao'],
+    example: 'Exemplo:\nGerente de Atendimento, salário R$7.000 a R$8.500\nGerente de Controladoria, salário R$7.000 a R$8.500',
+  },
+  {
+    id: 'rs_valores',
+    label: 'Investimento e Pagamento',
+    question: '💰 Agora os valores do contrato.\n\nO investimento é cobrado por vaga, com pagamento em duas parcelas de 50%. O DISC é cobrado à parte por candidato avaliado.\n\n• **Descrição de valores por vaga:** (ex: Gerente de Atendimento: R$10.000)\n• **Valor de entrada** (50% do total, apenas o número):\n• **Valor na contratação** (50% restante, apenas o número):\n• **Valor do DISC** por candidato (apenas o número):',
+    fields: ['descricao_vagas_valores', 'valor_entrada', 'valor_final', 'valor_disc'],
+    example: 'Exemplo:\nDescrição: Gerente de Atendimento: R$10.000. Gerente de Controladoria: R$10.000. Total: R$20.000\nEntrada: 10000\nFinal: 10000\nDISC: 500',
+  },
+  {
+    id: 'rs_encerramento',
+    label: 'Prazo, Foro e Assinatura',
+    question: '⚖️ Última etapa — prazo, foro e data de assinatura.\n\n• **Prazo do contrato** (em meses, ex: 2):\n• **Estado do foro judicial** (ex: Rio de Janeiro):\n• **Cidade de assinatura:**\n• **Data de assinatura** (DD/MM/AAAA):',
+    fields: ['prazo_meses', 'foro_estado', 'cidade_assinatura', 'data_assinatura'],
+    example: 'Exemplo:\nPrazo: 2\nEstado do foro: Rio de Janeiro\nCidade: Rio de Janeiro\nData: 26/03/2025',
+  },
+];
+
 // ---------- Exportação ----------
 
 export const workflows: Record<string, WorkflowDefinition> = {
-  contrato:           { name: 'contrato',           steps: contratoSteps,  fieldGroups: contratoGroups  },
-  proposta_comercial: { name: 'proposta_comercial',  steps: propostaSteps,  fieldGroups: propostaGroups  },
-  orcamento:          { name: 'orcamento',           steps: orcamentoSteps, fieldGroups: orcamentoGroups },
-  relatorio_final:    { name: 'relatorio_final',     steps: relatorioSteps, fieldGroups: relatorioGroups },
-  nda:                { name: 'nda',                 steps: ndaSteps,       fieldGroups: ndaGroups       },
+  contrato:           { name: 'contrato',           steps: contratoSteps,    fieldGroups: contratoGroups    },
+  contrato_rs:        { name: 'contrato_rs',         steps: contratoRsSteps,  fieldGroups: contratoRsGroups  },
+  proposta_comercial: { name: 'proposta_comercial',  steps: propostaSteps,    fieldGroups: propostaGroups    },
+  orcamento:          { name: 'orcamento',           steps: orcamentoSteps,   fieldGroups: orcamentoGroups   },
+  relatorio_final:    { name: 'relatorio_final',     steps: relatorioSteps,   fieldGroups: relatorioGroups   },
+  nda:                { name: 'nda',                 steps: ndaSteps,         fieldGroups: ndaGroups         },
 };
 
 export const ALLOWED_DOCUMENT_TYPES = Object.keys(workflows) as readonly string[];

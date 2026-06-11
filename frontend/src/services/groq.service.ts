@@ -31,11 +31,10 @@ export const sendMessage = async (message: string, conversationId?: string | nul
 
 export const generatePDF = async (
   dados: Record<string, string>,
-  logoBase64?: string
 ): Promise<Blob> => {
   const response = await api.post(
     '/pdf/generate',
-    { dados, logoBase64 },
+    { dados },
     { responseType: 'blob' }
   );
   return response.data;

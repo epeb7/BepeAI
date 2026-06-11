@@ -14,6 +14,7 @@ import { PDFDocument, rgb, StandardFonts, PDFPage, PDFFont, RGB } from 'pdf-lib'
 import fs from 'fs/promises';
 import path from 'path';
 import logger from '../lib/logger';
+import { TenantConfig, resolveTemplate } from './tenant.service';
 
 // ── Paleta BepeAI ─────────────────────────────────────────────
 const BRAND_BLUE  = rgb(0.071, 0.149, 0.388);
@@ -28,6 +29,7 @@ const templateCache = new Map<string, string>();
 
 async function carregarTemplate(tipo: string): Promise<string> {
   if (templateCache.has(tipo)) return templateCache.get(tipo)!;
+  // tipo pode ser 'contrato' ou 'clients/leticiaabreu/contrato'
   const templatePath = path.join(__dirname, '../templates', `${tipo}.txt`);
   try {
     const conteudo = await fs.readFile(templatePath, 'utf-8');
@@ -38,6 +40,16 @@ async function carregarTemplate(tipo: string): Promise<string> {
     templateCache.set(tipo, fallback);
     return fallback;
   }
+}
+
+// Retorna true se o templateName pertence a um cliente (pasta clients/)
+function isClientTemplate(templateName: string): boolean {
+  return templateName.startsWith('clients/');
+}
+
+// Extrai o slug do cliente de 'clients/leticiaabreu/contrato' → 'leticiaabreu'
+function extractClientSlug(templateName: string): string {
+  return templateName.split('/')[1] ?? '';
 }
 
 // ── Formatação de valores ─────────────────────────────────────
@@ -256,72 +268,136 @@ function drawParagraph(
   ctx.y -= afterGap;
 }
 
-// ── Header BepeAI ─────────────────────────────────────────────
-async function drawHeader(ctx: RenderCtx, titulo: string, logoBase64?: string): Promise<void> {
-  const hH  = 68;
+// ── Paleta Leticia Abreu R&S (extraída da logo) ───────────────
+const LA_BLUE      = rgb(0.176, 0.290, 0.431); // #2D4A6E — azul principal
+const LA_BLUE_DARK = rgb(0.110, 0.196, 0.314); // #1C3250 — azul escuro
+const LA_BLUE_PALE = rgb(0.918, 0.929, 0.949); // #EAEdf2 — fundo suave
+
+// ── Header ────────────────────────────────────────────────────
+async function drawHeader(
+  ctx: RenderCtx,
+  titulo: string,
+  logoBase64?: string,
+  companyName?: string,
+  useClientLayout = false,
+): Promise<void> {
   const top = ctx.pageHeight;
 
-  ctx.page.drawRectangle({ x: 0, y: top - hH, width: ctx.pageWidth, height: hH, color: BRAND_BLUE });
-  ctx.page.drawRectangle({ x: 0, y: top - hH - 3, width: ctx.pageWidth, height: 3, color: BRAND_LIGHT });
+  if (useClientLayout) {
+    // ── Header profissional Leticia Abreu: fundo branco ────────
+    // Faixa fina azul escura no topo (4px)
+    ctx.page.drawRectangle({ x: 0, y: top - 4, width: ctx.pageWidth, height: 4, color: LA_BLUE_DARK });
 
-  let logoDrawn = false;
-  if (logoBase64) {
-    try {
-      const base64Data = logoBase64.split(',')[1] ?? logoBase64;
-      const logoBytes  = Buffer.from(base64Data, 'base64');
-      const isPng = logoBase64.includes('image/png') || base64Data.startsWith('iVBOR');
-      const img   = isPng ? await ctx.pdfDoc.embedPng(logoBytes) : await ctx.pdfDoc.embedJpg(logoBytes);
-      const dims  = img.scaleToFit(38, 38);
-      ctx.page.drawImage(img, {
-        x: ctx.margin.left,
-        y: top - hH + (hH - dims.height) / 2,
-        width: dims.width,
-        height: dims.height,
-      });
-      logoDrawn = true;
-    } catch { /* sem logo */ }
+    // Área do header branca
+    const hH = 76;
+    ctx.page.drawRectangle({ x: 0, y: top - 4 - hH, width: ctx.pageWidth, height: hH, color: WHITE });
+
+    // Logo à esquerda, centralizada verticalmente na área branca
+    let logoDrawn = false;
+    if (logoBase64) {
+      try {
+        const base64Data = logoBase64.split(',')[1] ?? logoBase64;
+        const logoBytes  = Buffer.from(base64Data, 'base64');
+        const isPng = logoBase64.includes('image/png') || base64Data.startsWith('iVBOR');
+        const img   = isPng ? await ctx.pdfDoc.embedPng(logoBytes) : await ctx.pdfDoc.embedJpg(logoBytes);
+        const dims  = img.scaleToFit(170, 52);
+        ctx.page.drawImage(img, {
+          x: ctx.margin.left,
+          y: top - 4 - hH + (hH - dims.height) / 2,
+          width: dims.width,
+          height: dims.height,
+        });
+        logoDrawn = true;
+      } catch { /* fallback abaixo */ }
+    }
+    if (!logoDrawn) {
+      const brandY = top - 4 - hH + hH / 2 + 4;
+      ctx.page.drawText(companyName ?? 'Leticia Abreu', { x: ctx.margin.left, y: brandY, size: 14, font: ctx.fontBold, color: LA_BLUE });
+      ctx.page.drawText('RECRUTAMENTO E SELEÇÃO', { x: ctx.margin.left, y: brandY - 14, size: 7, font: ctx.font, color: LA_BLUE });
+    }
+
+    // Separador vertical azul entre logo e título
+    const sepX = ctx.pageWidth / 2;
+    ctx.page.drawLine({
+      start: { x: sepX, y: top - 4 - 14 },
+      end:   { x: sepX, y: top - 4 - hH + 14 },
+      thickness: 0.6,
+      color: LA_BLUE_PALE,
+    });
+
+    // Título do documento — direita, azul escuro
+    const titleSize  = 9;
+    const titleLabel = titulo.toUpperCase();
+    const titleW     = ctx.fontBold.widthOfTextAtSize(titleLabel, titleSize);
+    const titleX     = ctx.pageWidth - ctx.margin.right - titleW;
+    const titleY     = top - 4 - hH / 2 - 4;
+    ctx.page.drawText(titleLabel, { x: titleX, y: titleY, size: titleSize, font: ctx.fontBold, color: LA_BLUE_DARK });
+
+    // Linha decorativa azul abaixo do header
+    ctx.page.drawRectangle({ x: 0, y: top - 4 - hH - 2, width: ctx.pageWidth, height: 2, color: LA_BLUE });
+    // Linha mais fina abaixo
+    ctx.page.drawRectangle({ x: 0, y: top - 4 - hH - 5, width: ctx.pageWidth, height: 1, color: LA_BLUE_PALE });
+
+    ctx.y = top - 4 - hH - 22;
+
+  } else {
+    // ── Header padrão BepeAI ───────────────────────────────────
+    const hH = 72;
+    ctx.page.drawRectangle({ x: 0, y: top - hH, width: ctx.pageWidth, height: hH, color: BRAND_BLUE });
+    ctx.page.drawRectangle({ x: 0, y: top - hH - 3, width: ctx.pageWidth, height: 3, color: BRAND_LIGHT });
+
+    let logoDrawn = false;
+    if (logoBase64) {
+      try {
+        const base64Data = logoBase64.split(',')[1] ?? logoBase64;
+        const logoBytes  = Buffer.from(base64Data, 'base64');
+        const isPng = logoBase64.includes('image/png') || base64Data.startsWith('iVBOR');
+        const img   = isPng ? await ctx.pdfDoc.embedPng(logoBytes) : await ctx.pdfDoc.embedJpg(logoBytes);
+        const dims  = img.scaleToFit(160, 48);
+        ctx.page.drawImage(img, {
+          x: ctx.margin.left,
+          y: top - hH + (hH - dims.height) / 2,
+          width: dims.width,
+          height: dims.height,
+        });
+        logoDrawn = true;
+      } catch { /* fallback */ }
+    }
+    if (!logoDrawn) {
+      const bx = ctx.margin.left + 18;
+      const by = top - hH + hH / 2;
+      ctx.page.drawCircle({ x: bx, y: by, size: 15, color: BRAND_LIGHT });
+      const bW = ctx.fontBold.widthOfTextAtSize('B', 13);
+      ctx.page.drawText('B', { x: bx - bW / 2, y: by - 5, size: 13, font: ctx.fontBold, color: WHITE });
+      const brandX = ctx.margin.left + 42;
+      const brandY = top - hH + hH / 2 + 3;
+      ctx.page.drawText(companyName ?? 'BepeAI', { x: brandX, y: brandY, size: 13, font: ctx.fontBold, color: WHITE });
+      ctx.page.drawText('Automação Documental com IA', { x: brandX, y: brandY - 14, size: 7, font: ctx.font, color: rgb(0.7, 0.76, 0.92) });
+    }
+
+    const titleSize = 10;
+    const titleW    = ctx.fontBold.widthOfTextAtSize(titulo, titleSize);
+    ctx.page.drawText(titulo, { x: ctx.pageWidth - ctx.margin.right - titleW, y: top - hH + hH / 2 + 3, size: titleSize, font: ctx.fontBold, color: WHITE });
+    ctx.y = top - hH - 24;
   }
-
-  if (!logoDrawn) {
-    const bx = ctx.margin.left + 18;
-    const by = top - hH + hH / 2;
-    ctx.page.drawCircle({ x: bx, y: by, size: 15, color: BRAND_LIGHT });
-    const bW = ctx.fontBold.widthOfTextAtSize('B', 13);
-    ctx.page.drawText('B', { x: bx - bW / 2, y: by - 5, size: 13, font: ctx.fontBold, color: WHITE });
-  }
-
-  const brandX = ctx.margin.left + 42;
-  const brandY = top - hH + hH / 2 + 3;
-  ctx.page.drawText('BepeAI', { x: brandX, y: brandY, size: 13, font: ctx.fontBold, color: WHITE });
-  ctx.page.drawText('Automação Documental com IA', {
-    x: brandX, y: brandY - 14, size: 7, font: ctx.font, color: rgb(0.7, 0.76, 0.92),
-  });
-
-  const titleSize = 10;
-  const titleW = ctx.fontBold.widthOfTextAtSize(titulo, titleSize);
-  ctx.page.drawText(titulo, {
-    x: ctx.pageWidth - ctx.margin.right - titleW,
-    y: top - hH + hH / 2 + 3,
-    size: titleSize,
-    font: ctx.fontBold,
-    color: WHITE,
-  });
-
-  ctx.y = top - hH - 24;
 }
 
 // ── Seção de qualificação das partes ──────────────────────────
-function drawParty(ctx: RenderCtx, label: string, content: string): void {
+function drawParty(ctx: RenderCtx, label: string, content: string, useClientLayout = false): void {
   ensureSpace(ctx, 70);
+  const badgeColor = useClientLayout ? LA_BLUE_PALE : rgb(0.91, 0.94, 0.99);
+  const textColor  = useClientLayout ? LA_BLUE_DARK : BRAND_BLUE;
+  const badgeW     = useClientLayout
+    ? ctx.fontBold.widthOfTextAtSize(label, 8.5) + 12
+    : 100;
 
-  // Badge colorido com label
   ctx.page.drawRectangle({
-    x: ctx.margin.left, y: ctx.y - 2, width: 100, height: 14,
-    color: rgb(0.91, 0.94, 0.99),
+    x: ctx.margin.left, y: ctx.y - 2, width: badgeW, height: 14,
+    color: badgeColor,
   });
   ctx.page.drawText(label, {
     x: ctx.margin.left + 4, y: ctx.y, size: 8.5,
-    font: ctx.fontBold, color: BRAND_BLUE,
+    font: ctx.fontBold, color: textColor,
   });
   ctx.y -= 14;
 
@@ -477,6 +553,209 @@ function drawFooters(ctx: RenderCtx): void {
   });
 }
 
+// ── Título de seção estilo RS ─────────────────────────────────
+function drawRsSection(ctx: RenderCtx, titulo: string): void {
+  ensureSpace(ctx, 36);
+  ctx.y -= 12;
+
+  // Linha fina azul acima
+  ctx.page.drawLine({
+    start: { x: ctx.margin.left,                          y: ctx.y + 18 },
+    end:   { x: ctx.pageWidth - ctx.margin.right,         y: ctx.y + 18 },
+    thickness: 0.4,
+    color: LA_BLUE_PALE,
+  });
+
+  // Barra lateral sólida
+  ctx.page.drawRectangle({
+    x: ctx.margin.left,
+    y: ctx.y - 1,
+    width: 3,
+    height: 13,
+    color: LA_BLUE,
+  });
+
+  ctx.page.drawText(titulo.toUpperCase(), {
+    x: ctx.margin.left + 10,
+    y: ctx.y,
+    size: 9,
+    font: ctx.fontBold,
+    color: LA_BLUE_DARK,
+  });
+  ctx.y -= 14;
+}
+
+// ── Item de lista RS (bullet quadrado sólido) ─────────────────
+function drawRsItem(ctx: RenderCtx, texto: string): void {
+  const size = 9.5;
+  const bulletX = ctx.margin.left + 4;
+  const textX   = ctx.margin.left + 16;
+  const usableW = ctx.maxWidth - 16;
+
+  const allWords = texto.replace(/\s+/g, ' ').trim().split(' ');
+  const lines: string[][] = [];
+  let cur: string[] = [];
+
+  for (const w of allWords) {
+    const test = [...cur, w];
+    if (ctx.font.widthOfTextAtSize(test.join(' '), size) <= usableW) {
+      cur.push(w);
+    } else {
+      if (cur.length) lines.push(cur);
+      cur = [w];
+    }
+  }
+  if (cur.length) lines.push(cur);
+
+  for (let i = 0; i < lines.length; i++) {
+    ensureSpace(ctx, size + 5);
+    if (i === 0) {
+      ctx.page.drawRectangle({ x: bulletX, y: ctx.y + 1, width: 3, height: 3, color: LA_BLUE });
+    }
+    const isLast = i === lines.length - 1;
+    if (isLast || lines[i].length === 1) {
+      ctx.page.drawText(lines[i].join(' '), { x: textX, y: ctx.y, size, font: ctx.font, color: GRAY_DARK });
+    } else {
+      const totalW = lines[i].reduce((a, w) => a + ctx.font.widthOfTextAtSize(w, size), 0);
+      const gaps   = lines[i].length - 1;
+      const sp     = (usableW - totalW) / gaps;
+      let cx = textX;
+      for (let j = 0; j < lines[i].length; j++) {
+        ctx.page.drawText(lines[i][j], { x: cx, y: ctx.y, size, font: ctx.font, color: GRAY_DARK });
+        cx += ctx.font.widthOfTextAtSize(lines[i][j], size) + (j < lines[i].length - 1 ? sp : 0);
+      }
+    }
+    ctx.y -= size + 4;
+  }
+  ctx.y -= 3;
+}
+
+// ── Assinatura estilo RS (duas colunas, sem testemunhas) ───────
+function drawRsSignatureBlock(
+  ctx: RenderCtx,
+  contratante: { empresa: string; cnpj: string; nome: string },
+  contratado:  { empresa: string; cnpj: string; nome: string },
+  localData: string,
+): void {
+  ensureSpace(ctx, 120);
+  ctx.y -= 16;
+
+  // Local e data centralizado
+  if (localData) {
+    const w = ctx.fontOblique.widthOfTextAtSize(localData, 9.5);
+    ctx.page.drawText(localData, {
+      x: (ctx.pageWidth - w) / 2, y: ctx.y,
+      size: 9.5, font: ctx.fontOblique, color: GRAY_MID,
+    });
+  }
+  ctx.y -= 32;
+
+  const colW = (ctx.maxWidth - 32) / 2;
+  const lx   = ctx.margin.left;
+  const rx   = ctx.margin.left + colW + 32;
+
+  // Linhas
+  ctx.page.drawLine({ start: { x: lx, y: ctx.y }, end: { x: lx + colW, y: ctx.y }, thickness: 0.8, color: GRAY_DARK });
+  ctx.page.drawLine({ start: { x: rx, y: ctx.y }, end: { x: rx + colW, y: ctx.y }, thickness: 0.8, color: GRAY_DARK });
+  ctx.y -= 13;
+
+  // Empresa
+  ctx.page.drawText(contratante.empresa.toUpperCase(), { x: lx, y: ctx.y, size: 8.5, font: ctx.fontBold, color: GRAY_DARK });
+  ctx.page.drawText(contratado.empresa.toUpperCase(),  { x: rx, y: ctx.y, size: 8.5, font: ctx.fontBold, color: GRAY_DARK });
+  ctx.y -= 11;
+
+  // CNPJ
+  ctx.page.drawText(`CNPJ: ${formatarCNPJ(contratante.cnpj)}`, { x: lx, y: ctx.y, size: 8, font: ctx.font, color: GRAY_MID });
+  ctx.page.drawText(`CNPJ: ${formatarCNPJ(contratado.cnpj)}`,  { x: rx, y: ctx.y, size: 8, font: ctx.font, color: GRAY_MID });
+  ctx.y -= 11;
+
+  // Representante
+  ctx.page.drawText(`Neste ato representada por ${contratante.nome}`, { x: lx, y: ctx.y, size: 8, font: ctx.font, color: GRAY_MID });
+  ctx.page.drawText(`Neste ato representada por ${contratado.nome}`,  { x: rx, y: ctx.y, size: 8, font: ctx.font, color: GRAY_MID });
+}
+
+// ── Renderizador dedicado para templates de clientes ──────────
+function renderClientTemplate(ctx: RenderCtx, conteudo: string, dados: Record<string, string>): void {
+  const linhas = conteudo.split('\n');
+  let i = 0;
+
+  while (i < linhas.length) {
+    const linha = linhas[i].trim();
+
+    if (linha === '') { ctx.y -= 3; i++; continue; }
+
+    // Título do documento (primeira linha — ignorado, já está no header)
+    if (/^(CONTRATO DE PRESTAÇÃO DE SERVIÇOS|PROPOSTA COMERCIAL|ORÇAMENTO|RELATÓRIO FINAL|ACORDO DE CONFIDENCIALIDADE)$/i.test(linha)) { i++; continue; }
+
+    // Cabeçalho "Identificação das partes"
+    if (/^Identificação das partes/i.test(linha)) {
+      drawParagraph(ctx, linha, { size: 9, italic: true, justify: false, color: GRAY_MID, afterGap: 6 });
+      i++; continue;
+    }
+
+    // Qualificação de partes (todos os documentos)
+    if (/^(CONTRATANTE|CONTRATADO|EMITENTE|DESTINATÁRIO|SOLICITANTE|EMPRESA|RESPONSÁVEL|PARTE DIVULGADORA|PARTE RECEPTORA):\s/.test(linha)) {
+      const colonIdx = linha.indexOf(':');
+      const label    = linha.slice(0, colonIdx);
+      const content  = linha.slice(colonIdx + 1).trim();
+      drawParty(ctx, label + ':', content, true);
+      i++; continue;
+    }
+
+    // Seção RS
+    if (/^RS_SECTION:\s/.test(linha)) {
+      drawRsSection(ctx, linha.replace(/^RS_SECTION:\s*/, ''));
+      i++; continue;
+    }
+
+    // Item RS
+    if (/^RS_ITEM:\s/.test(linha)) {
+      drawRsItem(ctx, linha.replace(/^RS_ITEM:\s*/, ''));
+      i++; continue;
+    }
+
+    // Assinatura RS
+    if (/^RS_ASSINATURAS:\s/.test(linha)) {
+      const localData = linha.replace(/^RS_ASSINATURAS:\s*/, '');
+      drawRsSignatureBlock(
+        ctx,
+        {
+          empresa: dados['contratante_empresa'] ?? 'CONTRATANTE',
+          cnpj:    dados['contratante_cnpj']    ?? '',
+          nome:    dados['contratante_nome']     ?? '',
+        },
+        {
+          empresa: dados['contratado_empresa']  ?? 'CONTRATADO',
+          cnpj:    dados['contratado_cnpj']     ?? '',
+          nome:    dados['contratado_nome']      ?? '',
+        },
+        localData,
+      );
+      i++; continue;
+    }
+
+    // Parágrafos §
+    if (/^§/.test(linha) || /^Parágrafo único/i.test(linha)) {
+      drawParagraph(ctx, linha, { size: 9.5, indent: 18, justify: true, afterGap: 5 });
+      i++; continue;
+    }
+
+    // Encerramento
+    if (/^E por estarem assim/i.test(linha)) {
+      ctx.y -= 6;
+      drawParagraph(ctx, linha, { size: 9.5, indent: 18, justify: true, afterGap: 4 });
+      i++; continue;
+    }
+
+    // Linha de local/data (fallback)
+    if (/^LOCAL_ASSINATURA:/i.test(linha)) { i++; continue; }
+
+    // Parágrafo normal
+    drawParagraph(ctx, linha, { size: 9.5, justify: true, afterGap: 6 });
+    i++;
+  }
+}
+
 // ── Renderizador principal ────────────────────────────────────
 function renderContent(ctx: RenderCtx, conteudo: string, dados: Record<string, string>): void {
   const linhas = conteudo.split('\n');
@@ -614,20 +893,31 @@ function renderContent(ctx: RenderCtx, conteudo: string, dados: Record<string, s
 export async function gerarPDF(
   dados: Record<string, string>,
   tipoDocumento: string,
-  logoBase64?: string
+  tenantConfig?: TenantConfig | null,
 ): Promise<Buffer> {
+  // Resolve logo, nome da empresa e template considerando config do tenant
+  const logoBase64   = tenantConfig?.logoBase64 ?? null;
+  const companyName  = tenantConfig?.companyName ?? null;
+  const templateName = tenantConfig
+    ? resolveTemplate(tipoDocumento, tenantConfig.templateOverrides)
+    : tipoDocumento;
+
   // 1. Preenche template
-  let template = await carregarTemplate(tipoDocumento);
+  let template = await carregarTemplate(templateName);
 
   // Campos derivados (extenso e formatados)
   // Suporte a dois nomes para valor total: valor_total (contrato) e valor_total_proposta/valor_total_orcamento
   const valorTotalEfetivo = dados['valor_total'] ?? dados['valor_total_proposta'] ?? dados['valor_total_orcamento'] ?? '';
   const dadosCompletos: Record<string, string> = {
     ...dados,
-    // contrato
+    // contrato genérico
     valor_total_extenso:              valorParaExtenso(valorTotalEfetivo),
     aviso_previo_extenso:             numeroPorExtenso(dados['aviso_previo']              ?? ''),
     data_assinatura_formatada:        dados['data_assinatura']                             ?? '',
+    // campos Leticia Abreu (clients/leticiaabreu/contrato)
+    valor_entrada_extenso:            valorParaExtenso(dados['valor_entrada']              ?? ''),
+    valor_final_extenso:              valorParaExtenso(dados['valor_final']                ?? ''),
+    valor_disc_extenso:               valorParaExtenso(dados['valor_disc']                 ?? ''),
     // proposta
     valor_total_proposta_extenso:     valorParaExtenso(dados['valor_total_proposta']       ?? valorTotalEfetivo),
     validade_proposta_extenso:        numeroPorExtenso(dados['validade_proposta']           ?? ''),
@@ -674,12 +964,17 @@ export async function gerarPDF(
     maxWidth:   pageW - margin.left - margin.right,
   };
 
-  // 3. Cabeçalho
+  // 3. Cabeçalho — templates de clientes (clients/*) usam layout do cliente
+  const useClientLayout = isClientTemplate(templateName);
   const titulo = TITULOS[tipoDocumento] ?? tipoDocumento.replace(/_/g, ' ').toUpperCase();
-  await drawHeader(ctx, titulo, logoBase64);
+  await drawHeader(ctx, titulo, logoBase64 ?? undefined, companyName ?? undefined, useClientLayout);
 
-  // 4. Corpo
-  renderContent(ctx, conteudo, dadosCompletos);
+  // 4. Corpo — templates de clientes usam renderizador com marcadores RS_SECTION/RS_ITEM
+  if (useClientLayout) {
+    renderClientTemplate(ctx, conteudo, dadosCompletos);
+  } else {
+    renderContent(ctx, conteudo, dadosCompletos);
+  }
 
   // 5. Rodapés
   drawFooters(ctx);

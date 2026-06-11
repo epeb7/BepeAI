@@ -1,11 +1,12 @@
 import { Response } from 'express';
 import { gerarPDF } from '../services/pdf.service';
+import { getTenantConfig } from '../services/tenant.service';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { ALLOWED_DOCUMENT_TYPES } from '../workflows/definitions';
 import logger from '../lib/logger';
 
 export const generatePDF = async (req: AuthRequest, res: Response) => {
-  const { dados, logoBase64 } = req.body;
+  const { dados } = req.body;
 
   if (!dados || typeof dados !== 'object') {
     return res.status(400).json({ error: 'Dados não fornecidos ou inválidos' });
@@ -24,16 +25,14 @@ export const generatePDF = async (req: AuthRequest, res: Response) => {
     });
   }
 
-  // Valida tamanho da logo — máx ~2MB em base64 (~2.7MB raw)
-  if (logoBase64 && typeof logoBase64 === 'string' && logoBase64.length > 2_800_000) {
-    return res.status(400).json({ error: 'Logo muito grande. Tamanho máximo: 2MB.' });
-  }
+  // Carrega config do tenant (logo, template overrides, etc.)
+  const tenantConfig = req.userId ? await getTenantConfig(req.userId) : null;
 
   // Remove tipoDocumento dos dados antes de passar ao template
   const { tipoDocumento: _tipo, ...dadosLimpos } = dados as Record<string, string>;
 
   try {
-    const pdfBuffer = await gerarPDF(dadosLimpos, tipoDocumento, logoBase64);
+    const pdfBuffer = await gerarPDF(dadosLimpos, tipoDocumento, tenantConfig);
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
